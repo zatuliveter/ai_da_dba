@@ -35,21 +35,27 @@ function connectWS() {
     ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
     ws.onopen = () => {
+        console.log("[WS] Connected");
         setStatus("connected");
         if (currentDatabase) {
             ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
         }
     };
 
-    ws.onclose = () => {
+    ws.onclose = (e) => {
+        console.log("[WS] Closed:", e.code, e.reason);
         setStatus("disconnected");
         setTimeout(connectWS, 2000);
     };
 
-    ws.onerror = () => setStatus("disconnected");
+    ws.onerror = (e) => {
+        console.error("[WS] Error:", e);
+        setStatus("disconnected");
+    };
 
     ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        console.log("[WS] Message:", data.type, data);
         handleMessage(data);
     };
 }
@@ -175,7 +181,17 @@ function setInputEnabled(enabled) {
 
 function sendMessage() {
     const text = userInput.value.trim();
-    if (!text || !ws || ws.readyState !== WebSocket.OPEN || !currentDatabase) return;
+    if (!text) return;
+
+    if (!currentDatabase) {
+        appendError("Please select a database first.");
+        return;
+    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        appendError("WebSocket is not connected. Reconnecting...");
+        connectWS();
+        return;
+    }
 
     appendUser(text);
     ws.send(JSON.stringify({ type: "message", content: text }));

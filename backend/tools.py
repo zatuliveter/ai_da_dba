@@ -58,7 +58,7 @@ def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
             ) WITHIN GROUP (ORDER BY ic.key_ordinal) AS key_columns,
             STRING_AGG(
                 CASE WHEN ic.is_included_column = 1 THEN c.name END, ', '
-            ) WITHIN GROUP (ORDER BY ic.index_column_id) AS included_columns
+            ) WITHIN GROUP (ORDER BY ic.key_ordinal) AS included_columns
         FROM sys.indexes i
         JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
         JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
