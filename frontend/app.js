@@ -9,6 +9,34 @@ let ws = null;
 let currentDatabase = null;
 
 // ---------------------------------------------------------------------------
+// Theme toggle
+// ---------------------------------------------------------------------------
+
+const themeToggle = document.getElementById("theme-toggle");
+const iconSun = document.getElementById("icon-sun");
+const iconMoon = document.getElementById("icon-moon");
+const hljsLink = document.getElementById("hljs-theme");
+
+function setTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+
+    const isLight = theme === "light";
+    iconSun.classList.toggle("hidden", isLight);
+    iconMoon.classList.toggle("hidden", !isLight);
+    hljsLink.href = isLight
+        ? "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css"
+        : "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css";
+}
+
+themeToggle.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme") || "dark";
+    setTheme(current === "dark" ? "light" : "dark");
+});
+
+setTheme(localStorage.getItem("theme") || "dark");
+
+// ---------------------------------------------------------------------------
 // Markdown rendering with highlight.js
 // ---------------------------------------------------------------------------
 

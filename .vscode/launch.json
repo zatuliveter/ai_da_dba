@@ -3,7 +3,7 @@
   "configurations": [
     {
       "name": "AI DBA: Backend + Browser",
-      "type": "python",
+      "type": "debugpy",
       "request": "launch",
       "module": "uvicorn",
       "args": ["main:app", "--host", "0.0.0.0", "--port", "8888", "--reload"],

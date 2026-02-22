@@ -13,7 +13,7 @@ from tools import TOOL_DEFINITIONS, dispatch_tool
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("agent")
 
-app = FastAPI(title="AI DBA Agent")
+app = FastAPI(title="AI DA DBA")
 
 # ---------------------------------------------------------------------------
 # REST: list available databases
