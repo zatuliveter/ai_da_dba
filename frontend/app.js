@@ -1,12 +1,20 @@
 const chatContainer = document.getElementById("chat-container");
 const welcomeEl = document.getElementById("welcome");
 const dbSelect = document.getElementById("db-select");
+const dbDescriptionWrap = document.getElementById("db-description-wrap");
+const dbDescription = document.getElementById("db-description");
+const chatListEl = document.getElementById("chat-list");
+const newChatBtn = document.getElementById("new-chat-btn");
+const clearChatBtn = document.getElementById("clear-chat-btn");
 const statusDot = document.getElementById("connection-status");
 const userInput = document.getElementById("user-input");
 const sendBtn = document.getElementById("send-btn");
 
 let ws = null;
 let currentDatabase = null;
+let currentChatId = null;
+let databases = []; // [{name, description}]
+let descriptionSaveTimer = null;
 
 // stream state
 let currentStreamDiv = null;
@@ -78,6 +86,9 @@ function connectWS() {
         setStatus("connected");
         if (currentDatabase) {
             ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
+            if (currentChatId != null) {
+                ws.send(JSON.stringify({ type: "set_chat", chat_id: currentChatId }));
+            }
         }
     };
 
@@ -116,7 +127,7 @@ function setStatus(state) {
 function handleMessage(data) {
     switch (data.type) {
         case "stream":
-            removeSpinner(); // remove thinking spinner when text starts flowing
+            removeSpinner();
             handleStreamChunk(data.content);
             break;
         case "stream_end":
@@ -125,9 +136,9 @@ function handleMessage(data) {
             setInputEnabled(true);
             break;
         case "tool_call":
-            removeSpinner(); // remove previous spinner
+            removeSpinner();
             appendToolCall(data.tool, data.args);
-            showSpinner(); // show spinner again while tool is executing
+            showSpinner();
             break;
         case "system":
             appendSystem(data.content);
@@ -139,27 +150,54 @@ function handleMessage(data) {
             currentStreamContent = "";
             setInputEnabled(true);
             break;
+        case "history_loaded":
+            renderHistory(data.messages || []);
+            setInputEnabled(true);
+            break;
+        case "chat_created":
+            if (data.chat) {
+                addChatToList(data.chat);
+                currentChatId = data.chat.id;
+                updateChatActiveState();
+                saveState();
+            }
+            break;
+        case "chat_cleared":
+            clearChatUI();
+            setInputEnabled(true);
+            break;
     }
 }
 
-function handleStreamChunk(textChunk) {
-    hideWelcome();
-    
-    // create the message container on the first chunk
-    if (!currentStreamDiv) {
-        currentStreamDiv = document.createElement("div");
-        currentStreamDiv.className = "msg-assistant";
-        chatContainer.appendChild(currentStreamDiv);
+function renderHistory(messages) {
+    clearChatUI();
+    if (messages.length === 0) {
+        if (welcomeEl) welcomeEl.style.display = "";
+        return;
     }
-
-    // append new raw text to the accumulator
-    currentStreamContent += textChunk;
-    
-    // re-render the entire accumulated string as markdown
-    currentStreamDiv.innerHTML = renderMarkdown(currentStreamContent);
-    highlightCodeBlocks(currentStreamDiv);
-
+    hideWelcome();
+    for (const msg of messages) {
+        if (msg.role === "user") {
+            appendUser(msg.content);
+        } else if (msg.role === "assistant") {
+            const div = document.createElement("div");
+            div.className = "msg-assistant";
+            div.innerHTML = renderMarkdown(msg.content || "");
+            highlightCodeBlocks(div);
+            chatContainer.appendChild(div);
+        }
+    }
     scrollToBottom();
+}
+
+function clearChatUI() {
+    currentStreamDiv = null;
+    currentStreamContent = "";
+    const msgs = chatContainer.querySelectorAll(
+        ".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge"
+    );
+    msgs.forEach((m) => m.remove());
+    if (welcomeEl) welcomeEl.style.display = "";
 }
 
 // ---------------------------------------------------------------------------
@@ -233,7 +271,9 @@ function removeSpinner() {
 
 function setInputEnabled(enabled) {
     userInput.disabled = !enabled;
-    sendBtn.disabled = !enabled || !currentDatabase;
+    const canSend = enabled && currentDatabase && currentChatId != null;
+    sendBtn.disabled = !canSend;
+    clearChatBtn.disabled = !(currentChatId != null);
     if (enabled) userInput.focus();
 }
 
@@ -243,6 +283,10 @@ function sendMessage() {
 
     if (!currentDatabase) {
         appendError("Please select a database first.");
+        return;
+    }
+    if (currentChatId == null) {
+        appendError("Please select or create a chat first.");
         return;
     }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -274,7 +318,7 @@ userInput.addEventListener("input", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Database selector
+// Database selector & description
 // ---------------------------------------------------------------------------
 
 async function loadDatabases() {
@@ -282,12 +326,19 @@ async function loadDatabases() {
         const resp = await fetch("/api/databases");
         const data = await resp.json();
 
+        databases = data.databases || [];
         dbSelect.innerHTML = '<option value="">-- select database --</option>';
-        for (const db of data.databases) {
+        for (const db of databases) {
             const opt = document.createElement("option");
-            opt.value = db;
-            opt.textContent = db;
+            opt.value = db.name;
+            opt.textContent = db.name;
             dbSelect.appendChild(opt);
+        }
+
+        const savedDb = localStorage.getItem("ai_da_dba_db");
+        if (savedDb && databases.some((d) => d.name === savedDb)) {
+            dbSelect.value = savedDb;
+            await onDatabaseChange(savedDb);
         }
 
         if (data.error) {
@@ -299,26 +350,145 @@ async function loadDatabases() {
     }
 }
 
-dbSelect.addEventListener("change", () => {
-    const db = dbSelect.value;
-    if (!db) return;
+function saveDescription() {
+    if (!currentDatabase) return;
+    const desc = dbDescription.value.trim();
+    fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/description`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: desc }),
+    }).catch((e) => console.error("Failed to save description:", e));
+    // update local cache
+    const d = databases.find((x) => x.name === currentDatabase);
+    if (d) d.description = desc;
+}
 
-    currentDatabase = db;
-    sendBtn.disabled = false;
+dbDescription.addEventListener("input", () => {
+    if (descriptionSaveTimer) clearTimeout(descriptionSaveTimer);
+    descriptionSaveTimer = setTimeout(saveDescription, 500);
+});
 
+dbDescription.addEventListener("blur", () => {
+    if (descriptionSaveTimer) {
+        clearTimeout(descriptionSaveTimer);
+        descriptionSaveTimer = null;
+    }
+    saveDescription();
+});
+
+async function loadChats(dbName) {
+    try {
+        const resp = await fetch(`/api/databases/${encodeURIComponent(dbName)}/chats`);
+        const data = await resp.json();
+        const chats = data.chats || [];
+        chatListEl.innerHTML = "";
+        for (const chat of chats) {
+            addChatToList(chat, false);
+        }
+        updateChatActiveState();
+    } catch (e) {
+        console.error("Failed to load chats:", e);
+        chatListEl.innerHTML = "";
+    }
+}
+
+function addChatToList(chat, scroll = true) {
+    const li = document.createElement("li");
+    li.className = "chat-item rounded-lg px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-800 truncate";
+    li.dataset.chatId = String(chat.id);
+    li.title = chat.title || "Chat";
+    const title = chat.title || "Новый чат";
+    const date = chat.created_at ? new Date(chat.created_at).toLocaleDateString() : "";
+    li.textContent = title;
+    if (date) {
+        const span = document.createElement("span");
+        span.className = "block text-xs text-gray-500 truncate";
+        span.textContent = date;
+        li.appendChild(span);
+    }
+    li.addEventListener("click", () => selectChat(chat.id));
+    chatListEl.appendChild(li);
+    if (scroll) chatListEl.scrollTop = 0;
+}
+
+function updateChatActiveState() {
+    chatListEl.querySelectorAll(".chat-item").forEach((el) => {
+        const id = el.dataset.chatId;
+        el.classList.toggle("bg-blue-600/30", id === String(currentChatId));
+    });
+}
+
+function selectChat(chatId) {
+    currentChatId = chatId;
+    updateChatActiveState();
+    saveState();
     if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "set_database", database: db }));
+        ws.send(JSON.stringify({ type: "set_chat", chat_id: chatId }));
+    } else {
+        connectWS();
+    }
+}
+
+async function onDatabaseChange(db) {
+    currentDatabase = db;
+    currentChatId = null;
+    updateChatActiveState();
+    saveState();
+
+    if (db) {
+        dbDescriptionWrap.classList.remove("hidden");
+        const d = databases.find((x) => x.name === db);
+        dbDescription.value = (d && d.description) || "";
+        await loadChats(db);
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "set_database", database: db }));
+        }
+
+        const savedChat = localStorage.getItem("ai_da_dba_chat");
+        if (savedChat) {
+            const chatId = parseInt(savedChat, 10);
+            const exists = chatListEl.querySelector(`[data-chat-id="${chatId}"]`);
+            if (exists) {
+                selectChat(chatId);
+            }
+        }
+    } else {
+        dbDescriptionWrap.classList.add("hidden");
+        dbDescription.value = "";
+        chatListEl.innerHTML = "";
     }
 
-    // Clear chat on database switch
-    currentStreamDiv = null;
-    currentStreamContent = "";
-    const msgs = chatContainer.querySelectorAll(
-        ".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge"
-    );
-    msgs.forEach((m) => m.remove());
-    if (welcomeEl) welcomeEl.style.display = "";
+    newChatBtn.disabled = !db;
+    clearChatUI();
+    setInputEnabled(true);
+}
+
+dbSelect.addEventListener("change", () => {
+    const db = dbSelect.value;
+    onDatabaseChange(db || null);
 });
+
+newChatBtn.addEventListener("click", () => {
+    if (!currentDatabase) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        appendError("WebSocket is not connected.");
+        connectWS();
+        return;
+    }
+    ws.send(JSON.stringify({ type: "create_chat", title: "Новый чат" }));
+});
+
+clearChatBtn.addEventListener("click", () => {
+    if (currentChatId == null) return;
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: "clear_chat" }));
+});
+
+function saveState() {
+    if (currentDatabase) localStorage.setItem("ai_da_dba_db", currentDatabase);
+    if (currentChatId != null) localStorage.setItem("ai_da_dba_chat", String(currentChatId));
+}
 
 // ---------------------------------------------------------------------------
 // Init

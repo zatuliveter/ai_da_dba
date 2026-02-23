@@ -1,13 +1,23 @@
 import json
 import logging
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
 from config import llm_client, LLM_MODEL
 from db import list_databases
 from prompts import SYSTEM_PROMPT
+from store import (
+    get_db_description,
+    set_db_description,
+    list_chats,
+    create_chat,
+    get_chat_messages,
+    append_chat_messages,
+    clear_chat,
+    init_db,
+)
 from tools import TOOL_DEFINITIONS, dispatch_tool
 
 logging.basicConfig(level=logging.INFO)
@@ -16,16 +26,57 @@ log = logging.getLogger("agent")
 app = FastAPI(title="AI DA DBA")
 
 # ---------------------------------------------------------------------------
-# REST: list available databases
+# REST: list available databases (with descriptions from store)
 # ---------------------------------------------------------------------------
 
 @app.get("/api/databases")
 def api_databases():
     try:
-        return {"databases": list_databases()}
+        names = list_databases()
+        databases = [
+            {"name": n, "description": get_db_description(n) or ""}
+            for n in names
+        ]
+        return {"databases": databases}
     except Exception as e:
         log.error("Failed to list databases: %s", e)
         return {"databases": [], "error": str(e)}
+
+
+@app.put("/api/databases/{name}/description")
+def api_set_database_description(name: str, body: dict = Body(default={})):
+    """Body: {"description": "..."}. Saves to SQLite store."""
+    try:
+        description = (body or {}).get("description", "") or ""
+        set_db_description(name, description)
+        return {"ok": True}
+    except Exception as e:
+        log.error("Failed to set description for %s: %s", name, e)
+        return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/databases/{name}/chats")
+def api_list_chats(name: str):
+    """List chats for the given database."""
+    try:
+        chats = list_chats(name)
+        return {"chats": chats}
+    except Exception as e:
+        log.error("Failed to list chats for %s: %s", name, e)
+        return {"chats": [], "error": str(e)}
+
+
+@app.post("/api/databases/{name}/chats")
+def api_create_chat(name: str, body: dict = Body(default=None)):
+    """Create a new chat for the database. Body optional: {"title": "..."}. Returns {id, title, created_at}."""
+    try:
+        title = (body or {}).get("title", "Новый чат") or "Новый чат"
+        chat = create_chat(name, title)
+        return chat
+    except Exception as e:
+        log.error("Failed to create chat for %s: %s", name, e)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ---------------------------------------------------------------------------
 # WebSocket: chat with agent
@@ -37,8 +88,10 @@ MAX_TOOL_ROUNDS = 10
 @app.websocket("/ws")
 async def ws_chat(ws: WebSocket):
     await ws.accept()
+    init_db()
     messages: list[dict] = []
     database: str | None = None
+    chat_id: int | None = None
 
     try:
         while True:
@@ -47,11 +100,48 @@ async def ws_chat(ws: WebSocket):
 
             if payload.get("type") == "set_database":
                 database = payload["database"]
+                chat_id = None
+                messages.clear()
                 await ws.send_text(json.dumps({
                     "type": "system",
                     "content": f"Connected to database: {database}",
                 }))
+                continue
+
+            if payload.get("type") == "set_chat":
+                cid = payload.get("chat_id")
+                if cid is None:
+                    await ws.send_text(json.dumps({"type": "error", "content": "chat_id required"}))
+                    continue
+                chat_id = int(cid)
                 messages.clear()
+                history = get_chat_messages(chat_id)
+                messages.extend(history)
+                await ws.send_text(json.dumps({"type": "history_loaded", "messages": history}))
+                continue
+
+            if payload.get("type") == "create_chat":
+                if not database:
+                    await ws.send_text(json.dumps({"type": "error", "content": "Select a database first."}))
+                    continue
+                title = payload.get("title", "Новый чат") or "Новый чат"
+                chat = create_chat(database, title)
+                chat_id = chat["id"]
+                messages.clear()
+                await ws.send_text(json.dumps({
+                    "type": "chat_created",
+                    "chat": chat,
+                }))
+                await ws.send_text(json.dumps({"type": "history_loaded", "messages": []}))
+                continue
+
+            if payload.get("type") == "clear_chat":
+                if chat_id is None:
+                    await ws.send_text(json.dumps({"type": "error", "content": "No chat selected."}))
+                    continue
+                clear_chat(chat_id)
+                messages.clear()
+                await ws.send_text(json.dumps({"type": "chat_cleared"}))
                 continue
 
             if payload.get("type") == "message":
@@ -61,11 +151,22 @@ async def ws_chat(ws: WebSocket):
                         "content": "Please select a database first.",
                     }))
                     continue
+                if chat_id is None:
+                    await ws.send_text(json.dumps({
+                        "type": "error",
+                        "content": "Please select or create a chat first.",
+                    }))
+                    continue
 
                 user_text = payload.get("content", "")
                 messages.append({"role": "user", "content": user_text})
 
-                await _agent_loop(ws, messages, database)
+                await _agent_loop(ws, messages, database, chat_id)
+
+                # Persist the new user + assistant messages to this chat
+                if len(messages) >= 2:
+                    append_chat_messages(chat_id, messages[-2:])
+                continue
 
     except WebSocketDisconnect:
         log.info("Client disconnected")
@@ -77,9 +178,17 @@ async def ws_chat(ws: WebSocket):
             pass
 
 
-async def _agent_loop(ws: WebSocket, messages: list[dict], database: str):
+async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, chat_id: int | None = None):
+    # System prompt with database context for AI
+    description = get_db_description(database) or ""
+    db_context = f"\n\nYou are working with database: {database}."
+    if description:
+        db_context += f" User-provided context: {description}"
+    db_context += "\n"
+    system_content = SYSTEM_PROMPT + db_context
+
     # setup messages for the current loop
-    full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
+    full_messages = [{"role": "system", "content": system_content}] + messages
 
     for round_num in range(MAX_TOOL_ROUNDS):
         log.info("Agent round %d, messages: %d", round_num + 1, len(full_messages))

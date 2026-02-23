@@ -30,43 +30,66 @@
                     <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
                 </svg>
             </button>
-            <div class="w-px h-5 bg-gray-700"></div>
-            <label for="db-select" class="text-sm text-gray-400">Database:</label>
-            <select id="db-select" class="bg-gray-800 border border-gray-700 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 min-w-[200px]">
-                <option value="">Loading...</option>
-            </select>
             <div id="connection-status" class="w-2.5 h-2.5 rounded-full bg-gray-600" title="Disconnected"></div>
         </div>
     </header>
 
-    <!-- Chat area -->
-    <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-        <div id="welcome" class="flex flex-col items-center justify-center h-full text-gray-500">
-            <div class="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center mb-4">
-                <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M4 7v10c0 2 1 3 5 3h6c4 0 5-1 5-3V7c0-2-1-3-5-3H9C5 4 4 5 4 7z"/>
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                        d="M12 4v16M4 12h16"/>
-                </svg>
+    <!-- Main layout: sidebar + chat -->
+    <div class="flex-1 flex min-h-0">
+        <!-- Sidebar: DB select, description, chats -->
+        <aside id="sidebar" class="w-72 shrink-0 border-r border-gray-800 bg-gray-900 flex flex-col overflow-hidden">
+            <div class="p-3 space-y-3">
+                <label for="db-select" class="text-xs text-gray-400 block">Database</label>
+                <select id="db-select" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                    <option value="">Loading...</option>
+                </select>
+                <div id="db-description-wrap" class="hidden">
+                    <label for="db-description" class="text-xs text-gray-400 block">Context (saves automatically)</label>
+                    <textarea id="db-description" rows="3" placeholder="Describe what this database is for..."
+                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-blue-500 placeholder-gray-500"></textarea>
+                </div>
             </div>
-            <p class="text-lg mb-1">Select a database and ask a question</p>
-            <p class="text-sm">Paste a SQL query to get optimization recommendations</p>
-        </div>
-    </main>
+            <div class="flex-1 flex flex-col min-h-0 border-t border-gray-800">
+                <div class="flex items-center justify-between px-3 py-2">
+                    <span class="text-xs text-gray-400">Chats</span>
+                    <button id="new-chat-btn" class="text-xs text-blue-400 hover:text-blue-300 disabled:text-gray-500" disabled>New chat</button>
+                </div>
+                <ul id="chat-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></ul>
+            </div>
+        </aside>
+
+        <!-- Chat area -->
+        <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-6 space-y-4 flex flex-col">
+            <div id="welcome" class="flex flex-col items-center justify-center flex-1 text-gray-500">
+                <div class="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center mb-4">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M4 7v10c0 2 1 3 5 3h6c4 0 5-1 5-3V7c0-2-1-3-5-3H9C5 4 4 5 4 7z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                            d="M12 4v16M4 12h16"/>
+                    </svg>
+                </div>
+                <p class="text-lg mb-1">Select a database and a chat</p>
+                <p class="text-sm">Create a new chat or open an existing one</p>
+            </div>
+        </main>
+    </div>
 
     <!-- Input area -->
     <footer class="border-t border-gray-800 bg-gray-900 px-4 py-3 shrink-0">
-        <div class="max-w-4xl mx-auto flex gap-3">
+        <div class="max-w-4xl mx-auto flex gap-3 items-end">
             <textarea id="user-input"
                 class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-blue-500 placeholder-gray-500"
                 rows="3"
                 placeholder="Paste a SQL query or ask a question about your database..."></textarea>
-            <button id="send-btn"
-                class="self-end bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-xl px-5 py-3 text-sm font-medium transition-colors"
-                disabled>
-                Send
-            </button>
+            <div class="flex flex-col gap-2">
+                <button id="clear-chat-btn" class="text-xs text-gray-400 hover:text-gray-300 disabled:text-gray-600" disabled>Clear chat</button>
+                <button id="send-btn"
+                    class="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-xl px-5 py-3 text-sm font-medium transition-colors"
+                    disabled>
+                    Send
+                </button>
+            </div>
         </div>
     </footer>
 
