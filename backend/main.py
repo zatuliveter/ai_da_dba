@@ -78,81 +78,95 @@ async def ws_chat(ws: WebSocket):
 
 
 async def _agent_loop(ws: WebSocket, messages: list[dict], database: str):
-    """Run the ReAct agent loop: LLM -> tool calls -> LLM -> ... -> final answer."""
-
+    # setup messages for the current loop
     full_messages = [{"role": "system", "content": SYSTEM_PROMPT}] + messages
 
     for round_num in range(MAX_TOOL_ROUNDS):
         log.info("Agent round %d, messages: %d", round_num + 1, len(full_messages))
 
         try:
+            # enable streaming in llm client
             response = llm_client.chat.completions.create(
                 model=LLM_MODEL,
                 messages=full_messages,
                 tools=TOOL_DEFINITIONS,
                 temperature=0.2,
+                stream=True, 
             )
         except Exception as e:
             log.error("LLM call failed: %s", e)
-            await ws.send_text(json.dumps({
-                "type": "error",
-                "content": f"LLM error: {e}",
-            }))
+            await ws.send_text(json.dumps({"type": "error", "content": f"LLM error: {e}"}))
             return
 
-        choice = response.choices[0]
-        msg = choice.message
+        collected_msg = ""
+        tools_acc = {}
 
-        if msg.tool_calls:
-            assistant_msg = {"role": "assistant", "content": msg.content, "tool_calls": []}
-            for tc in msg.tool_calls:
-                assistant_msg["tool_calls"].append({
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {"name": tc.function.name, "arguments": tc.function.arguments},
-                })
-            full_messages.append(assistant_msg)
+        # process chunks as they arrive
+        for chunk in response:
+            delta = chunk.choices[0].delta
 
-            for tc in msg.tool_calls:
-                tool_name = tc.function.name
-                try:
-                    tool_args = json.loads(tc.function.arguments)
-                except json.JSONDecodeError:
-                    tool_args = {}
-
-                log.info("Tool call: %s(%s)", tool_name, tool_args)
-
+            # stream normal text directly to frontend
+            if delta.content:
+                collected_msg += delta.content
                 await ws.send_text(json.dumps({
-                    "type": "tool_call",
-                    "tool": tool_name,
-                    "args": tool_args,
+                    "type": "stream",
+                    "content": delta.content
                 }))
 
-                result = dispatch_tool(tool_name, tool_args, database)
+            # accumulate tool call chunks
+            if delta.tool_calls:
+                for tc in delta.tool_calls:
+                    idx = tc.index
+                    if idx not in tools_acc:
+                        tools_acc[idx] = {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {"name": tc.function.name or "", "arguments": ""}
+                        }
+                    if tc.function.arguments:
+                        tools_acc[idx]["function"]["arguments"] += tc.function.arguments
 
+        # if tools were called, execute them and continue the loop
+        if tools_acc:
+            assistant_msg = {
+                "role": "assistant", 
+                "content": collected_msg or None, 
+                "tool_calls": list(tools_acc.values())
+            }
+            full_messages.append(assistant_msg)
+
+            for tc in assistant_msg["tool_calls"]:
+                t_name = tc["function"]["name"]
+                try:
+                    t_args = json.loads(tc["function"]["arguments"])
+                except json.JSONDecodeError:
+                    t_args = {}
+
+                log.info("Tool call: %s(%s)", t_name, t_args)
+                await ws.send_text(json.dumps({
+                    "type": "tool_call",
+                    "tool": t_name,
+                    "args": t_args,
+                }))
+
+                result = dispatch_tool(t_name, t_args, database)
                 full_messages.append({
                     "role": "tool",
-                    "tool_call_id": tc.id,
+                    "tool_call_id": tc["id"],
                     "content": result,
                 })
-
+            
+            # go to the next react loop iteration
             continue
 
-        # No tool calls — final answer
-        final_text = msg.content or ""
-        messages.append({"role": "assistant", "content": final_text})
-
-        await ws.send_text(json.dumps({
-            "type": "answer",
-            "content": final_text,
-        }))
+        # no tools called, meaning this is the final answer
+        messages.append({"role": "assistant", "content": collected_msg})
+        await ws.send_text(json.dumps({"type": "stream_end"}))
         return
 
-    # Safety: max rounds exceeded
-    await ws.send_text(json.dumps({
-        "type": "error",
-        "content": "Agent reached maximum tool call rounds. Please try a simpler query.",
-    }))
+    # safety limit reached
+    err_msg = "Agent reached maximum tool call rounds."
+    await ws.send_text(json.dumps({"type": "error", "content": err_msg}))
 
 
 # ---------------------------------------------------------------------------

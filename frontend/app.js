@@ -8,6 +8,10 @@ const sendBtn = document.getElementById("send-btn");
 let ws = null;
 let currentDatabase = null;
 
+// stream state
+let currentStreamDiv = null;
+let currentStreamContent = "";
+
 // ---------------------------------------------------------------------------
 // Theme toggle
 // ---------------------------------------------------------------------------
@@ -104,13 +108,19 @@ function setStatus(state) {
 
 function handleMessage(data) {
     switch (data.type) {
-        case "answer":
-            removeSpinner();
-            appendAssistant(data.content);
+        case "stream":
+            removeSpinner(); // remove thinking spinner when text starts flowing
+            handleStreamChunk(data.content);
+            break;
+        case "stream_end":
+            currentStreamDiv = null;
+            currentStreamContent = "";
             setInputEnabled(true);
             break;
         case "tool_call":
+            removeSpinner(); // remove previous spinner
             appendToolCall(data.tool, data.args);
+            showSpinner(); // show spinner again while tool is executing
             break;
         case "system":
             appendSystem(data.content);
@@ -118,9 +128,30 @@ function handleMessage(data) {
         case "error":
             removeSpinner();
             appendError(data.content);
+            currentStreamDiv = null;
+            currentStreamContent = "";
             setInputEnabled(true);
             break;
     }
+}
+
+function handleStreamChunk(textChunk) {
+    hideWelcome();
+    
+    // create the message container on the first chunk
+    if (!currentStreamDiv) {
+        currentStreamDiv = document.createElement("div");
+        currentStreamDiv.className = "msg-assistant";
+        chatContainer.appendChild(currentStreamDiv);
+    }
+
+    // append new raw text to the accumulator
+    currentStreamContent += textChunk;
+    
+    // re-render the entire accumulated string as markdown
+    currentStreamDiv.innerHTML = renderMarkdown(currentStreamContent);
+    
+    scrollToBottom();
 }
 
 // ---------------------------------------------------------------------------
@@ -140,15 +171,6 @@ function appendUser(text) {
     const div = document.createElement("div");
     div.className = "msg-user";
     div.textContent = text;
-    chatContainer.appendChild(div);
-    scrollToBottom();
-}
-
-function appendAssistant(text) {
-    hideWelcome();
-    const div = document.createElement("div");
-    div.className = "msg-assistant";
-    div.innerHTML = renderMarkdown(text);
     chatContainer.appendChild(div);
     scrollToBottom();
 }
