@@ -209,6 +209,7 @@ async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, chat_i
 
         collected_msg = ""
         tools_acc = {}
+        next_auto_index = 0  # when API omits index in chunk, assign 0, 1, 2...
 
         # process chunks as they arrive
         for chunk in response:
@@ -225,7 +226,10 @@ async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, chat_i
             # accumulate tool call chunks
             if delta.tool_calls:
                 for tc in delta.tool_calls:
-                    idx = tc.index
+                    # Gemini streaming sometimes omits index; use next sequential index
+                    idx = tc.index if isinstance(tc.index, int) and tc.index >= 0 else next_auto_index
+                    if idx >= next_auto_index:
+                        next_auto_index = idx + 1
                     if idx not in tools_acc:
                         tools_acc[idx] = {
                             "id": tc.id or "",
@@ -241,14 +245,16 @@ async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, chat_i
 
         # if tools were called, execute them and continue the loop
         if tools_acc:
+            # Ensure tool_calls are in index order (0, 1, 2...) for Gemini API
+            sorted_calls = [v for _, v in sorted(tools_acc.items())]
             assistant_msg = {
-                "role": "assistant", 
-                "content": collected_msg or None, 
-                "tool_calls": list(tools_acc.values())
+                "role": "assistant",
+                "content": collected_msg if collected_msg else "",  # Gemini rejects null content
+                "tool_calls": sorted_calls,
             }
             full_messages.append(assistant_msg)
 
-            for tc in assistant_msg["tool_calls"]:
+            for tc in sorted_calls:
                 t_name = tc["function"]["name"]
                 try:
                     t_args = json.loads(tc["function"]["arguments"])
