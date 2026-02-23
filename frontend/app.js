@@ -394,7 +394,7 @@ async function loadChats(dbName) {
 
 function addChatToList(chat, scroll = true) {
     const li = document.createElement("li");
-    li.className = "chat-item rounded-lg px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-800 truncate";
+    li.className = "chat-item rounded-lg px-2 py-1.5 text-sm cursor-pointer truncate theme-chat-item";
     li.dataset.chatId = String(chat.id);
     li.title = chat.title || "Chat";
     const title = chat.title || "Новый чат";
@@ -402,7 +402,7 @@ function addChatToList(chat, scroll = true) {
     li.textContent = title;
     if (date) {
         const span = document.createElement("span");
-        span.className = "block text-xs text-gray-500 truncate";
+        span.className = "block text-xs truncate theme-chat-date";
         span.textContent = date;
         li.appendChild(span);
     }
@@ -414,7 +414,7 @@ function addChatToList(chat, scroll = true) {
 function updateChatActiveState() {
     chatListEl.querySelectorAll(".chat-item").forEach((el) => {
         const id = el.dataset.chatId;
-        el.classList.toggle("bg-blue-600/30", id === String(currentChatId));
+        el.classList.toggle("active", id === String(currentChatId));
     });
 }
 

@@ -2,6 +2,7 @@
 :root {
     --bg-body: #030712;
     --bg-surface: #111827;
+    --bg-sidebar: #2c3341;
     --bg-elevated: #1f2937;
     --border: #1f2937;
     --border-input: #374151;
@@ -36,6 +37,7 @@
 [data-theme="light"] {
     --bg-body: #f8fafc;
     --bg-surface: #ffffff;
+    --bg-sidebar: #ff8484;
     --bg-elevated: #f1f5f9;
     --border: #e2e8f0;
     --border-input: #cbd5e1;
@@ -73,9 +75,74 @@ body {
     color: var(--text) !important;
 }
 
+/* Theme-aware utility classes (no Tailwind conflict) */
+.theme-header {
+    background-color: var(--bg-sidebar) !important;
+    border-color: var(--border) !important;
+}
+.theme-sidebar {
+    background-color: var(--bg-sidebar) !important;
+    border-color: var(--border) !important;
+}
+.theme-sidebar-border {
+    border-color: var(--border) !important;
+}
+.theme-label {
+    color: var(--text-secondary) !important;
+}
+.theme-input {
+    background-color: var(--bg-sidebar) !important;
+    border: 1px solid var(--border-input) !important;
+    color: var(--text) !important;
+}
+.theme-input::placeholder {
+    color: var(--text-muted) !important;
+}
+.theme-input:focus {
+    outline: none !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25) !important;
+}
+.theme-accent {
+    color: var(--accent) !important;
+    background: none !important;
+    border: none !important;
+    cursor: pointer !important;
+}
+.theme-accent:hover:not(:disabled) {
+    color: var(--accent-hover) !important;
+}
+.theme-send-btn {
+    background-color: var(--accent) !important;
+    color: #fff !important;
+}
+.theme-send-btn:hover:not(:disabled) {
+    background-color: var(--accent-hover) !important;
+}
+.theme-send-btn:disabled {
+    background-color: var(--disabled-bg) !important;
+    color: var(--disabled-text) !important;
+}
+.theme-body {
+    background-color: var(--bg-body) !important;
+    color: var(--text) !important;
+}
+.theme-muted {
+    color: var(--text-muted) !important;
+}
+.theme-welcome-icon {
+    background-color: var(--welcome-icon-bg) !important;
+    color: var(--text-muted) !important;
+}
+
 header {
     background-color: var(--bg-surface) !important;
     border-color: var(--border) !important;
+}
+
+header.theme-header,
+footer.theme-header {
+    background-color: var(--bg-sidebar) !important;
 }
 
 header label {
@@ -87,10 +154,49 @@ footer {
     border-color: var(--border) !important;
 }
 
-#db-select {
+/* ===== Sidebar (theme-aware) ===== */
+aside#sidebar,
+#sidebar {
+    background-color: var(--bg-sidebar) !important;
+    border-color: var(--border) !important;
+}
+#sidebar label,
+#sidebar .text-gray-400 {
+    color: var(--text-secondary) !important;
+}
+#sidebar #db-description {
     background-color: var(--bg-elevated) !important;
     border-color: var(--border-input) !important;
     color: var(--text) !important;
+}
+#sidebar #db-description::placeholder {
+    color: var(--text-muted) !important;
+}
+#sidebar .border-t.border-gray-800 {
+    border-color: var(--border) !important;
+}
+#sidebar #new-chat-btn {
+    color: var(--accent) !important;
+}
+#sidebar #new-chat-btn:hover:not(:disabled) {
+    color: var(--accent-hover) !important;
+}
+#sidebar #new-chat-btn:disabled {
+    color: var(--disabled-text) !important;
+}
+#sidebar #chat-list .chat-item {
+    color: var(--text-secondary) !important;
+}
+#sidebar #chat-list .chat-item.theme-chat-item:hover {
+    color: var(--text) !important;
+    background-color: var(--toggle-hover) !important;
+}
+#sidebar #chat-list .chat-item.active {
+    color: var(--text) !important;
+    background-color: var(--bg-elevated) !important;
+}
+#sidebar #chat-list .theme-chat-date {
+    color: var(--text-muted) !important;
 }
 
 #db-select option {
@@ -98,21 +204,6 @@ footer {
     color: var(--text);
 }
 
-#send-btn {
-    background-color: var(--accent) !important;
-    color: #fff !important;
-}
-#send-btn:hover:not(:disabled) {
-    background-color: var(--accent-hover) !important;
-}
-#send-btn:disabled {
-    background-color: var(--disabled-bg) !important;
-    color: var(--disabled-text) !important;
-}
-
-#welcome {
-    color: var(--text-muted) !important;
-}
 #welcome > div:first-child {
     background-color: var(--welcome-icon-bg) !important;
 }

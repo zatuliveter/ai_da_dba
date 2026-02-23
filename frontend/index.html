@@ -6,16 +6,16 @@
     <title>AI DA DBA</title>
     <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("theme") || "dark");</script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="style.css">
     <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-gray-950 text-gray-100 h-screen flex flex-col">
+<body class="h-screen flex flex-col">
 
     <!-- Header -->
-    <header class="flex items-center justify-between px-6 py-3 border-b border-gray-800 bg-gray-900 shrink-0">
+    <header class="flex items-center justify-between px-6 py-3 border-b shrink-0 theme-header">
         <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-sm">DB</div>
             <h1 class="text-lg font-semibold">AI DA DBA</h1>
@@ -37,31 +37,31 @@
     <!-- Main layout: sidebar + chat -->
     <div class="flex-1 flex min-h-0">
         <!-- Sidebar: DB select, description, chats -->
-        <aside id="sidebar" class="w-72 shrink-0 border-r border-gray-800 bg-gray-900 flex flex-col overflow-hidden">
+        <aside id="sidebar" class="w-72 shrink-0 border-r flex flex-col overflow-hidden theme-sidebar">
             <div class="p-3 space-y-3">
-                <label for="db-select" class="text-xs text-gray-400 block">Database</label>
-                <select id="db-select" class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500">
+                <label for="db-select" class="text-xs block theme-label">Database</label>
+                <select id="db-select" class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 theme-input">
                     <option value="">Loading...</option>
                 </select>
                 <div id="db-description-wrap" class="hidden">
-                    <label for="db-description" class="text-xs text-gray-400 block">Context (saves automatically)</label>
+                    <label for="db-description" class="text-xs block theme-label">Context (saves automatically)</label>
                     <textarea id="db-description" rows="3" placeholder="Describe what this database is for..."
-                        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-blue-500 placeholder-gray-500"></textarea>
+                        class="w-full rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 theme-input"></textarea>
                 </div>
             </div>
-            <div class="flex-1 flex flex-col min-h-0 border-t border-gray-800">
+            <div class="flex-1 flex flex-col min-h-0 border-t theme-sidebar-border">
                 <div class="flex items-center justify-between px-3 py-2">
-                    <span class="text-xs text-gray-400">Chats</span>
-                    <button id="new-chat-btn" class="text-xs text-blue-400 hover:text-blue-300 disabled:text-gray-500" disabled>New chat</button>
+                    <span class="text-xs theme-label">Chats</span>
+                    <button id="new-chat-btn" class="text-xs theme-accent disabled:opacity-50" disabled>New chat</button>
                 </div>
                 <ul id="chat-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></ul>
             </div>
         </aside>
 
         <!-- Chat area -->
-        <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-6 space-y-4 flex flex-col">
-            <div id="welcome" class="flex flex-col items-center justify-center flex-1 text-gray-500">
-                <div class="w-16 h-16 rounded-2xl bg-gray-800 flex items-center justify-center mb-4">
+        <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-6 space-y-4 flex flex-col theme-body">
+            <div id="welcome" class="flex flex-col items-center justify-center flex-1 theme-muted">
+                <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 theme-welcome-icon">
                     <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                             d="M4 7v10c0 2 1 3 5 3h6c4 0 5-1 5-3V7c0-2-1-3-5-3H9C5 4 4 5 4 7z"/>
@@ -76,20 +76,20 @@
     </div>
 
     <!-- Input area -->
-    <footer class="border-t border-gray-800 bg-gray-900 px-4 py-3 shrink-0">
+    <footer class="border-t px-4 py-3 shrink-0 theme-header">
         <div class="max-w-4xl mx-auto flex gap-3 items-end">
             <textarea id="user-input"
-                class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-blue-500 placeholder-gray-500"
+                class="flex-1 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 theme-input"
                 rows="3"
                 placeholder="Paste a SQL query or ask a question about your database..."></textarea>
             <div class="flex flex-col gap-2">
-                <button id="clear-chat-btn" class="text-xs text-gray-400 hover:text-gray-300 disabled:text-gray-600" disabled>Clear chat</button>
+                <button id="clear-chat-btn" class="text-xs theme-label hover:opacity-80 disabled:opacity-50" disabled>Clear chat</button>
                 <button id="send-btn"
-                    class="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 rounded-xl px-5 py-3 text-sm font-medium transition-colors"
+                    class="rounded-xl px-5 py-3 text-sm font-medium transition-colors theme-send-btn"
                     disabled>
                     Send
                 </button>
-            </div>
+            </div>    
         </div>
     </footer>
 
