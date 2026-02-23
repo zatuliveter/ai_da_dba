@@ -34,7 +34,7 @@
         </div>
     </header>
 
-    <!-- Main layout: sidebar + chat -->
+    <!-- Main layout: sidebar + (chat + input) -->
     <div class="flex-1 flex min-h-0">
         <!-- Sidebar: DB select, description, chats -->
         <aside id="sidebar" class="w-72 shrink-0 border-r flex flex-col overflow-hidden theme-sidebar">
@@ -58,40 +58,43 @@
             </div>
         </aside>
 
-        <!-- Chat area -->
-        <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-6 space-y-4 flex flex-col theme-body">
-            <div id="welcome" class="flex flex-col items-center justify-center flex-1 theme-muted">
-                <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 theme-welcome-icon">
-                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                            d="M4 7v10c0 2 1 3 5 3h6c4 0 5-1 5-3V7c0-2-1-3-5-3H9C5 4 4 5 4 7z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
-                            d="M12 4v16M4 12h16"/>
-                    </svg>
+        <!-- Right column: chat + input -->
+        <div class="flex-1 flex flex-col min-h-0 min-w-0">
+            <!-- Chat area -->
+            <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-6 space-y-4 flex flex-col theme-body">
+                <div id="welcome" class="flex flex-col items-center justify-center flex-1 theme-muted">
+                    <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 theme-welcome-icon">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M4 7v10c0 2 1 3 5 3h6c4 0 5-1 5-3V7c0-2-1-3-5-3H9C5 4 4 5 4 7z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                d="M12 4v16M4 12h16"/>
+                        </svg>
+                    </div>
+                    <p class="text-lg mb-1">Select a database and a chat</p>
+                    <p class="text-sm">Create a new chat or open an existing one</p>
                 </div>
-                <p class="text-lg mb-1">Select a database and a chat</p>
-                <p class="text-sm">Create a new chat or open an existing one</p>
-            </div>
-        </main>
-    </div>
+            </main>
 
-    <!-- Input area -->
-    <footer class="border-t px-4 py-3 shrink-0 theme-header">
-        <div class="max-w-4xl mx-auto flex gap-3 items-end">
-            <textarea id="user-input"
-                class="flex-1 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 theme-input"
-                rows="3"
-                placeholder="Paste a SQL query or ask a question about your database..."></textarea>
-            <div class="flex flex-col gap-2">
-                <button id="clear-chat-btn" class="text-xs theme-label hover:opacity-80 disabled:opacity-50" disabled>Clear chat</button>
-                <button id="send-btn"
-                    class="rounded-xl px-5 py-3 text-sm font-medium transition-colors theme-send-btn"
-                    disabled>
-                    Send
-                </button>
-            </div>    
+            <!-- Input area (only under chat) -->
+            <footer class="border-t px-4 py-3 shrink-0 theme-header">
+                <div class="max-w-4xl mx-auto flex gap-3 items-end">
+                    <textarea id="user-input"
+                        class="flex-1 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 theme-input"
+                        rows="3"
+                        placeholder="Paste a SQL query or ask a question about your database..."></textarea>
+                    <div class="flex flex-col gap-2">
+                        <button id="clear-chat-btn" class="text-xs theme-label hover:opacity-80 disabled:opacity-50" disabled>Clear chat</button>
+                        <button id="send-btn"
+                            class="rounded-xl px-5 py-3 text-sm font-medium transition-colors theme-send-btn"
+                            disabled>
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </footer>
         </div>
-    </footer>
+    </div>
 
     <script src="app.js?v=2"></script>
 </body>
