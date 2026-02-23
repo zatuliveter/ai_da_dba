@@ -58,6 +58,13 @@ function renderMarkdown(text) {
     return marked.parse(text);
 }
 
+function highlightCodeBlocks(container) {
+    if (typeof hljs === "undefined") return;
+    container.querySelectorAll("pre code").forEach((el) => {
+        hljs.highlightElement(el);
+    });
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket connection
 // ---------------------------------------------------------------------------
@@ -150,7 +157,8 @@ function handleStreamChunk(textChunk) {
     
     // re-render the entire accumulated string as markdown
     currentStreamDiv.innerHTML = renderMarkdown(currentStreamContent);
-    
+    highlightCodeBlocks(currentStreamDiv);
+
     scrollToBottom();
 }
 
