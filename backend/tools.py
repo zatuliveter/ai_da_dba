@@ -1,12 +1,15 @@
 import json
 import re
 import xml.etree.ElementTree as ET
-
+from datetime import datetime, timezone
 from db import execute_query, get_connection, rows_to_json
 
 # ---------------------------------------------------------------------------
 # Tool implementations
 # ---------------------------------------------------------------------------
+
+def get_current_utc_time() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
 def list_tables(database: str) -> str:
     sql = """
@@ -128,7 +131,7 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
 def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
     sql = """
         select
-            i.name as index_name
+          i.name as index_name
         , i.type_desc as index_type
         , i.is_unique
         , i.is_primary_key
@@ -138,7 +141,7 @@ def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
         , stat.row_count
         , stat.size_mb
 		, frag.avg_fragmentation_percent
-		, stu.last_stats_update
+		, stu.last_stats_update_days_ago
 		, ds.data_space
 		, ds.data_space_type
         from sys.indexes i
@@ -161,7 +164,7 @@ def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
 			outer apply ( select cast(avg(ips.avg_fragmentation_in_percent) as decimal(18, 1)) as avg_fragmentation_percent
 						  from sys.dm_db_index_physical_stats(db_id(), t.object_id, null, null, 'LIMITED') ips
 						  where ips.index_id > 0 ) frag
-			outer apply ( select cast(max(sp.last_updated) as smalldatetime) as last_stats_update
+			outer apply ( select convert(decimal(18, 1), datediff(hour, max(sp.last_updated), sysutcdatetime()) / 24.0) as last_stats_update_days_ago
 						  from sys.stats st
 							  cross apply sys.dm_db_stats_properties(st.object_id, st.stats_id) sp
 						  where st.object_id = t.object_id 
@@ -371,6 +374,14 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "get_current_utc_time",
+            "description": "Get the current UTC time.",
+            "parameters": {},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "list_tables",
             "description": "List all tables and views in the selected database for a given schema.",
             "parameters": {
@@ -399,7 +410,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_indexes",
-            "description": "Get all indexes on a table: index name, type (clustered/nonclustered), uniqueness, key columns, and included columns, rows count, size (MB), fragmentation, last stats update, data space name, data space type.",
+            "description": "Get all indexes on a table: index name, type (clustered/nonclustered), uniqueness, key columns, and included columns, rows count, size (MB), fragmentation, last stats update days ago, data space name, data space type.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -474,6 +485,7 @@ TOOL_DEFINITIONS = [
 def dispatch_tool(name: str, args: dict, database: str) -> str:
     """Route a tool call to the appropriate function."""
     handlers = {
+        "get_current_utc_time": lambda a: get_current_utc_time(),
         "list_tables": lambda a: list_tables(database),
         "get_table_structure": lambda a: get_table_structure(database, a["table_name"], a.get("schema", "dbo")),
         "get_indexes": lambda a: get_indexes(database, a["table_name"], a.get("schema", "dbo")),
