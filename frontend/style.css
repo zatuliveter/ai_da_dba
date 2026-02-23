@@ -37,7 +37,7 @@
 [data-theme="light"] {
     --bg-body: #f8fafc;
     --bg-surface: #ffffff;
-    --bg-sidebar: #ff8484;
+    --bg-sidebar: #e2e4ea;
     --bg-elevated: #f1f5f9;
     --border: #e2e8f0;
     --border-input: #cbd5e1;
@@ -77,7 +77,7 @@ body {
 
 /* Theme-aware utility classes (no Tailwind conflict) */
 .theme-header {
-    background-color: var(--bg-sidebar) !important;
+    background-color: var(--bg-surface) !important;
     border-color: var(--border) !important;
 }
 .theme-sidebar {
@@ -91,7 +91,7 @@ body {
     color: var(--text-secondary) !important;
 }
 .theme-input {
-    background-color: var(--bg-sidebar) !important;
+    background-color: var(--bg-surface) !important;
     border: 1px solid var(--border-input) !important;
     color: var(--text) !important;
 }
@@ -142,7 +142,7 @@ header {
 
 header.theme-header,
 footer.theme-header {
-    background-color: var(--bg-sidebar) !important;
+    background-color: var(--bg-surface) !important;
 }
 
 header label {
@@ -385,3 +385,4 @@ header .w-px {
 #user-input::placeholder {
     color: var(--text-muted) !important;
 }
+
