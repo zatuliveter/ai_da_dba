@@ -8,14 +8,13 @@ from db import execute_query, get_connection, rows_to_json
 # Tool implementations
 # ---------------------------------------------------------------------------
 
-def list_tables(database: str, schema: str = "dbo") -> str:
+def list_tables(database: str) -> str:
     sql = """
         SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
         FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_SCHEMA = ?
         ORDER BY TABLE_TYPE, TABLE_NAME
     """
-    return execute_query(database, sql, (schema,))
+    return execute_query(database, sql)
 
 
 def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> str:
@@ -275,13 +274,7 @@ TOOL_DEFINITIONS = [
             "description": "List all tables and views in the selected database for a given schema.",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "schema": {
-                        "type": "string",
-                        "description": "Schema name (default: dbo)",
-                        "default": "dbo",
-                    }
-                },
+                "properties": {},
                 "required": [],
             },
         },
@@ -395,7 +388,7 @@ TOOL_DEFINITIONS = [
 def dispatch_tool(name: str, args: dict, database: str) -> str:
     """Route a tool call to the appropriate function."""
     handlers = {
-        "list_tables": lambda a: list_tables(database, a.get("schema", "dbo")),
+        "list_tables": lambda a: list_tables(database),
         "get_table_structure": lambda a: get_table_structure(database, a["table_name"], a.get("schema", "dbo")),
         "get_indexes": lambda a: get_indexes(database, a["table_name"], a.get("schema", "dbo")),
         "get_table_stats": lambda a: get_table_stats(database, a["table_name"], a.get("schema", "dbo")),
