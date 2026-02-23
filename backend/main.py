@@ -119,12 +119,16 @@ async def _agent_loop(ws: WebSocket, messages: list[dict], database: str):
                     idx = tc.index
                     if idx not in tools_acc:
                         tools_acc[idx] = {
-                            "id": tc.id,
+                            "id": tc.id or "",
                             "type": "function",
-                            "function": {"name": tc.function.name or "", "arguments": ""}
+                            "function": {"name": "", "arguments": ""}
                         }
+                    if tc.function.name:
+                        tools_acc[idx]["function"]["name"] += tc.function.name
                     if tc.function.arguments:
                         tools_acc[idx]["function"]["arguments"] += tc.function.arguments
+                    if tc.id:
+                        tools_acc[idx]["id"] += tc.id
 
         # if tools were called, execute them and continue the loop
         if tools_acc:

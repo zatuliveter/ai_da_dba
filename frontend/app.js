@@ -303,6 +303,8 @@ dbSelect.addEventListener("change", () => {
     }
 
     // Clear chat on database switch
+    currentStreamDiv = null;
+    currentStreamContent = "";
     const msgs = chatContainer.querySelectorAll(
         ".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge"
     );
