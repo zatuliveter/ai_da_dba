@@ -10,9 +10,27 @@ from db import execute_query, get_connection, rows_to_json
 
 def list_tables(database: str) -> str:
     sql = """
-        SELECT TABLE_SCHEMA, TABLE_NAME, TABLE_TYPE
-        FROM INFORMATION_SCHEMA.TABLES
-        ORDER BY TABLE_TYPE, TABLE_NAME
+        select
+            tt.table_schema
+          , tt.table_name
+          , tt.table_type
+          , stat.row_count
+          , stat.data_size_mb
+          , stat.indexes_size_mb
+        from INFORMATION_SCHEMA.TABLES tt
+            outer apply (
+                select
+                    sum(iif(ps.index_id in (0, 1), ps.row_count, 0)) as row_count
+                , sum(iif(ps.index_id in (0, 1), ps.used_page_count, 0) * 8 / 1024) as data_size_mb
+                , sum(iif(ps.index_id > 1, ps.used_page_count, 0) * 8 / 1024) as indexes_size_mb
+                from sys.tables t
+                    join sys.schemas s on t.schema_id = s.schema_id
+                    join sys.dm_db_partition_stats ps on t.object_id = ps.object_id
+                where ps.index_id in (0, 1)
+                and t.name = tt.table_name
+                and s.name = tt.table_schema
+            ) stat
+        order by table_type, table_schema, table_name
     """
     return execute_query(database, sql)
 
@@ -47,44 +65,38 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
 
 def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
     sql = """
-        SELECT
-            i.name AS index_name,
-            i.type_desc AS index_type,
-            i.is_unique,
-            i.is_primary_key,
-            STRING_AGG(
-                CASE WHEN ic.is_included_column = 0 THEN c.name END, ', '
-            ) WITHIN GROUP (ORDER BY ic.key_ordinal) AS key_columns,
-            STRING_AGG(
-                CASE WHEN ic.is_included_column = 1 THEN c.name END, ', '
-            ) WITHIN GROUP (ORDER BY ic.key_ordinal) AS included_columns,
-			i.filter_definition
-        FROM sys.indexes i
-        JOIN sys.index_columns ic ON i.object_id = ic.object_id AND i.index_id = ic.index_id
-        JOIN sys.columns c ON ic.object_id = c.object_id AND ic.column_id = c.column_id
-        JOIN sys.tables t ON i.object_id = t.object_id
-        JOIN sys.schemas s ON t.schema_id = s.schema_id
-        WHERE s.name = ? AND t.name = ?
-          AND i.name IS NOT NULL
-        GROUP BY i.name, i.type_desc, i.is_unique, i.is_primary_key, i.filter_definition
-        ORDER BY i.is_primary_key DESC, i.name
-    """
-    return execute_query(database, sql, (schema, table_name))
-
-
-def get_table_stats(database: str, table_name: str, schema: str = "dbo") -> str:
-    sql = """
-        SELECT
-            s.name AS schema_name,
-            t.name AS table_name,
-            SUM(ps.row_count) AS row_count,
-            SUM(ps.reserved_page_count) * 8 / 1024 AS reserved_mb,
-            SUM(ps.used_page_count) * 8 / 1024 AS used_mb
-        FROM sys.tables t
-        JOIN sys.schemas s ON t.schema_id = s.schema_id
-        JOIN sys.dm_db_partition_stats ps ON t.object_id = ps.object_id
-        WHERE s.name = ? AND t.name = ? AND ps.index_id IN (0, 1)
-        GROUP BY s.name, t.name
+        select
+            i.name as index_name
+        , i.type_desc as index_type
+        , i.is_unique
+        , i.is_primary_key
+        , cols.key_columns
+        , cols.included_columns
+        , i.filter_definition
+        , stat.row_count
+        , stat.size_mb
+        from sys.indexes i
+            join sys.tables t on i.object_id = t.object_id
+            join sys.schemas s on t.schema_id = s.schema_id
+            outer apply ( select
+                            string_agg(case when ic.is_included_column = 0 then c.name end, ', ')within group(order by ic.key_ordinal) as key_columns
+                            , string_agg(case when ic.is_included_column = 1 then c.name end, ', ')within group(order by ic.key_ordinal) as included_columns
+                        from sys.index_columns ic
+                            join sys.columns c on ic.object_id = c.object_id
+                                                and ic.column_id = c.column_id
+                        where i.object_id = ic.object_id
+                            and i.index_id = ic.index_id ) cols
+            outer apply ( select
+                            sum(ps.row_count) as row_count
+                            , cast(sum(ps.used_page_count * 8 / 1024.0) as decimal(32, 3)) as size_mb
+                        from sys.dm_db_partition_stats ps
+                        where ps.object_id = t.object_id
+                            and ps.index_id = i.index_id ) stat
+        where i.name is not null
+          and s.name = ? 
+          and t.name = ?
+        order by i.is_primary_key desc
+               , i.name;
     """
     return execute_query(database, sql, (schema, table_name))
 
@@ -313,21 +325,6 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
-            "name": "get_table_stats",
-            "description": "Get table statistics: row count, reserved space (MB), used space (MB).",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "table_name": {"type": "string", "description": "Table name"},
-                    "schema": {"type": "string", "description": "Schema name (default: dbo)", "default": "dbo"},
-                },
-                "required": ["table_name"],
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
             "name": "get_execution_plan",
             "description": "Get the estimated execution plan for a SQL query. Returns operators, costs, row estimates, and missing index hints. Use this to analyze query performance.",
             "parameters": {
@@ -392,7 +389,6 @@ def dispatch_tool(name: str, args: dict, database: str) -> str:
         "list_tables": lambda a: list_tables(database),
         "get_table_structure": lambda a: get_table_structure(database, a["table_name"], a.get("schema", "dbo")),
         "get_indexes": lambda a: get_indexes(database, a["table_name"], a.get("schema", "dbo")),
-        "get_table_stats": lambda a: get_table_stats(database, a["table_name"], a.get("schema", "dbo")),
         "get_execution_plan": lambda a: get_execution_plan(database, a["query"]),
         "get_missing_indexes": lambda a: get_missing_indexes(database, a.get("table_name"), a.get("schema", "dbo")),
         "get_foreign_keys": lambda a: get_foreign_keys(database, a["table_name"], a.get("schema", "dbo")),

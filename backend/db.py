@@ -2,7 +2,7 @@ import json
 import pyodbc
 from config import SQL_SERVER
 
-MAX_ROWS = 50
+MAX_ROWS = 1000
 QUERY_TIMEOUT = 30
 
 _connection_string = (
