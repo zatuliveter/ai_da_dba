@@ -131,6 +131,7 @@ function handleMessage(data) {
             handleStreamChunk(data.content);
             break;
         case "stream_end":
+            removeAllToolBadges();
             currentStreamDiv = null;
             currentStreamContent = "";
             setInputEnabled(true);
@@ -145,6 +146,7 @@ function handleMessage(data) {
             break;
         case "error":
             removeSpinner();
+            removeAllToolBadges();
             appendError(data.content);
             currentStreamDiv = null;
             currentStreamContent = "";
@@ -266,10 +268,16 @@ function removeSpinner() {
     if (el) el.remove();
 }
 
+/** Remove all tool call badges (and thinking spinner) once the assistant reply is shown. */
+function removeAllToolBadges() {
+    chatContainer.querySelectorAll(".tool-badge").forEach((el) => el.remove());
+}
+
 function handleStreamChunk(content) {
     if (!content) return;
     if (!currentStreamDiv) {
         hideWelcome();
+        removeAllToolBadges();
         currentStreamDiv = document.createElement("div");
         currentStreamDiv.className = "msg-assistant";
         chatContainer.appendChild(currentStreamDiv);
