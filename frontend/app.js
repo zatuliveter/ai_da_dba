@@ -159,6 +159,7 @@ function handleMessage(data) {
                 addChatToList(data.chat);
                 currentChatId = data.chat.id;
                 updateChatActiveState();
+                clearChatUI();
                 saveState();
             }
             break;
@@ -265,8 +266,19 @@ function removeSpinner() {
     if (el) el.remove();
 }
 
-// ---------------------------------------------------------------------------
-// Input handling
+function handleStreamChunk(content) {
+    if (!content) return;
+    if (!currentStreamDiv) {
+        hideWelcome();
+        currentStreamDiv = document.createElement("div");
+        currentStreamDiv.className = "msg-assistant";
+        chatContainer.appendChild(currentStreamDiv);
+    }
+    currentStreamContent += content;
+    currentStreamDiv.innerHTML = renderMarkdown(currentStreamContent);
+    highlightCodeBlocks(currentStreamDiv);
+    scrollToBottom();
+}
 // ---------------------------------------------------------------------------
 
 function setInputEnabled(enabled) {
