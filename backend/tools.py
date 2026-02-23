@@ -70,9 +70,7 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
           , p.data_size_mb
           , idx.index_count
           , p.indexes_size_mb
-		  , case when ds.data_space_type = 'ROWS_FILEGROUP' then ds.data_space_name
-				 else concat(ds.data_space_name, '(', ds.partitioning_column, ')')
-			end as data_space
+		  , ds.data_space
 		  , ds.data_space_type
         from o
             outer apply ( 
@@ -93,9 +91,10 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
 			) idx
 			outer apply (
 				select
-					ds.name as data_space_name,
-					ds.type_desc as data_space_type,
-					c.name as partitioning_column
+                    case when ds.type_desc = 'ROWS_FILEGROUP' then ds.name
+                         else concat(ds.name, '(', c.name, ')')
+                    end as data_space
+				  , ds.type_desc as data_space_type
 				from sys.tables t
 					inner join sys.indexes i on t.object_id = i.object_id
 					inner join sys.data_spaces ds on i.data_space_id = ds.data_space_id
@@ -138,6 +137,10 @@ def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
         , i.filter_definition
         , stat.row_count
         , stat.size_mb
+		, frag.avg_fragmentation_percent
+		, stu.last_stats_update
+		, ds.data_space
+		, ds.data_space_type
         from sys.indexes i
             join sys.tables t on i.object_id = t.object_id
             join sys.schemas s on t.schema_id = s.schema_id
@@ -155,6 +158,28 @@ def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
                         from sys.dm_db_partition_stats ps
                         where ps.object_id = t.object_id
                             and ps.index_id = i.index_id ) stat
+			outer apply ( select cast(avg(ips.avg_fragmentation_in_percent) as decimal(18, 1)) as avg_fragmentation_percent
+						  from sys.dm_db_index_physical_stats(db_id(), t.object_id, null, null, 'LIMITED') ips
+						  where ips.index_id > 0 ) frag
+			outer apply ( select cast(max(sp.last_updated) as smalldatetime) as last_stats_update
+						  from sys.stats st
+							  cross apply sys.dm_db_stats_properties(st.object_id, st.stats_id) sp
+						  where st.object_id = t.object_id 
+						    and st.stats_id = i.index_id ) stu
+            			outer apply (
+				select
+                    case when ds.type_desc = 'ROWS_FILEGROUP' then ds.name
+                         else concat(ds.name, '(', c.name, ')')
+                    end as data_space
+				  , ds.type_desc as data_space_type
+				from sys.data_spaces ds 
+					left join sys.index_columns ic on i.object_id = ic.object_id
+						and i.index_id = ic.index_id
+						and ic.partition_ordinal > 0
+					left join sys.columns c on t.object_id = c.object_id
+						and ic.column_id = c.column_id
+				where i.data_space_id = ds.data_space_id
+			) ds
         where i.name is not null
           and s.name = ? 
           and t.name = ?
@@ -374,7 +399,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "get_indexes",
-            "description": "Get all indexes on a table: index name, type (clustered/nonclustered), uniqueness, key columns, and included columns.",
+            "description": "Get all indexes on a table: index name, type (clustered/nonclustered), uniqueness, key columns, and included columns, rows count, size (MB), fragmentation, last stats update, data space name, data space type.",
             "parameters": {
                 "type": "object",
                 "properties": {
