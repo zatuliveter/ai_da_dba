@@ -14,30 +14,29 @@
 </head>
 <body class="h-screen flex flex-col">
 
-    <!-- Header -->
-    <header class="flex items-center justify-between px-6 py-3 border-b shrink-0 theme-header">
-        <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center font-bold text-sm">DB</div>
-            <h1 class="text-lg font-semibold">AI DA DBA</h1>
-        </div>
-        <div class="flex items-center gap-3">
-            <button id="theme-toggle" title="Toggle theme">
-                <svg id="icon-sun" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <circle cx="12" cy="12" r="4"/>
-                    <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
-                </svg>
-                <svg id="icon-moon" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-                </svg>
-            </button>
-            <div id="connection-status" class="w-2.5 h-2.5 rounded-full bg-gray-600" title="Disconnected"></div>
-        </div>
-    </header>
-
     <!-- Main layout: sidebar + (chat + input) -->
     <div class="flex-1 flex min-h-0">
-        <!-- Sidebar: DB select, description, chats -->
-        <aside id="sidebar" class="w-72 shrink-0 border-r flex flex-col overflow-hidden theme-sidebar">
+        <!-- Left column: compact header + sidebar -->
+        <div class="w-72 shrink-0 flex flex-col min-h-0 border-r theme-sidebar">
+            <header class="flex items-center justify-between px-3 py-2 border-b shrink-0 theme-header">
+                <div class="flex items-center gap-2 cursor-pointer" id="app-title" title="Reload">
+                    <div class="w-6 h-6 rounded-md bg-blue-600 flex items-center justify-center font-bold text-xs">DB</div>
+                    <h1 class="text-sm font-semibold">AI DA DBA</h1>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button id="theme-toggle" title="Toggle theme">
+                        <svg id="icon-sun" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="4"/>
+                            <path d="M12 2v2m0 16v2M4.93 4.93l1.41 1.41m11.32 11.32l1.41 1.41M2 12h2m16 0h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>
+                        </svg>
+                        <svg id="icon-moon" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+                        </svg>
+                    </button>
+                    <div id="connection-status" class="w-2.5 h-2.5 rounded-full bg-gray-600" title="Disconnected"></div>
+                </div>
+            </header>
+            <aside id="sidebar" class="flex-1 flex flex-col min-h-0 overflow-hidden theme-sidebar">
             <div class="p-3 space-y-3">
                 <label for="db-select" class="text-xs block theme-label">Database</label>
                 <select id="db-select" class="w-full rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 theme-input">
@@ -62,6 +61,7 @@
                 <ul id="chat-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></ul>
             </div>
         </aside>
+        </div>
 
         <!-- Right column: chat + input -->
         <div class="flex-1 flex flex-col min-h-0 min-w-0">

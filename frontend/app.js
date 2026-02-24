@@ -541,3 +541,4 @@ function saveState() {
 
 loadDatabases();
 connectWS();
+document.getElementById("app-title").addEventListener("click", () => location.reload());
