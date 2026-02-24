@@ -16,6 +16,7 @@ from store import (
     get_chat_messages,
     append_chat_messages,
     set_chat_starred,
+    update_chat_title,
     delete_chat,
     get_chat_database_name,
     init_db,
@@ -77,6 +78,28 @@ def api_create_chat(name: str, body: dict = Body(default=None)):
         return chat
     except Exception as e:
         log.error("Failed to create chat for %s: %s", name, e)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/databases/{name}/chats/{chat_id}/title")
+def api_set_chat_title(name: str, chat_id: int, body: dict = Body(default=None)):
+    """Set chat title. Body: {"title": "..."}. Chat must belong to this database."""
+    try:
+        db_name = get_chat_database_name(chat_id)
+        if db_name is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Chat not found")
+        if db_name != name:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Chat not found")
+        title = (body or {}).get("title", "Новый чат") or "Новый чат"
+        update_chat_title(chat_id, title)
+        return {"ok": True, "title": title}
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            raise
+        log.error("Failed to set title for chat %s: %s", chat_id, e)
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 

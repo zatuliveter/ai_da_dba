@@ -220,13 +220,32 @@ aside#sidebar,
     color: var(--text-muted) !important;
 }
 
-/* Chat item row: star + content + delete */
+/* Chat item: two rows — row1: star + title, row2: date + edit + delete */
+#sidebar #chat-list .chat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.125rem;
+}
 #sidebar #chat-list .chat-item-row {
     display: flex;
     align-items: center;
     gap: 0.25rem;
+    min-width: 0;
 }
-#sidebar #chat-list .chat-item-content {
+#sidebar #chat-list .chat-item-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#sidebar #chat-list .chat-item-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    min-width: 0;
+    padding-left: 1.25rem;
+}
+#sidebar #chat-list .chat-item-date {
+    flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -250,6 +269,7 @@ aside#sidebar,
 #sidebar #chat-list .theme-chat-star-filled {
     color: var(--accent);
 }
+#sidebar #chat-list .chat-edit-btn,
 #sidebar #chat-list .chat-delete-btn {
     background: none;
     border: none;
@@ -260,11 +280,21 @@ aside#sidebar,
     color: var(--text-muted);
     transition: opacity 0.15s, color 0.15s;
 }
+#sidebar #chat-list .chat-edit-btn:hover {
+    color: var(--accent);
+}
 #sidebar #chat-list .chat-delete-btn:hover {
     color: var(--error-color);
 }
+#sidebar #chat-list .chat-item:hover .chat-edit-btn,
 #sidebar #chat-list .chat-item:hover .chat-delete-btn {
     opacity: 1;
+}
+#sidebar #chat-list .chat-item-title-input {
+    outline: none;
+}
+#sidebar #chat-list .chat-item-title-input:focus {
+    outline: none;
 }
 
 #db-select option {

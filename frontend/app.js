@@ -319,7 +319,7 @@ function sendMessage() {
         pendingMessage = text;
         userInput.value = "";
         userInput.style.height = "auto";
-        const title = text.split("\n")[0].trim().slice(0, 50) || "Новый чат";
+        const title = text.split("\n")[0].trim().slice(0, 40) || "Новый чат";
         ws.send(JSON.stringify({ type: "create_chat", title }));
         setInputEnabled(false);
         return;
@@ -426,7 +426,7 @@ async function loadChats(dbName) {
 function addChatToList(chat, insertAtTop = false) {
     const starred = !!chat.starred;
     const li = document.createElement("li");
-    li.className = "chat-item chat-item-row rounded-lg px-2 py-1.5 text-sm cursor-pointer theme-chat-item";
+    li.className = "chat-item rounded-lg px-2 py-1.5 text-sm cursor-pointer theme-chat-item";
     li.dataset.chatId = String(chat.id);
     li.title = chat.title || "Chat";
 
@@ -452,19 +452,33 @@ function addChatToList(chat, insertAtTop = false) {
             .catch((err) => console.error("Failed to toggle star:", err));
     });
 
-    const contentWrap = document.createElement("span");
-    contentWrap.className = "chat-item-content flex-1 min-w-0 truncate";
-    const title = chat.title || "Новый чат";
+    const titleText = chat.title || "Новый чат";
+    const titleSpan = document.createElement("span");
+    titleSpan.className = "chat-item-title flex-1 min-w-0 truncate";
+    titleSpan.textContent = titleText;
+
+    const row1 = document.createElement("div");
+    row1.className = "chat-item-row";
+    row1.appendChild(starBtn);
+    row1.appendChild(titleSpan);
+
     const dateTime = chat.created_at
         ? new Date(chat.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })
         : "";
-    contentWrap.textContent = title;
-    if (dateTime) {
-        const dateSpan = document.createElement("span");
-        dateSpan.className = "block text-xs truncate theme-chat-date";
-        dateSpan.textContent = dateTime;
-        contentWrap.appendChild(dateSpan);
-    }
+    const dateSpan = document.createElement("span");
+    dateSpan.className = "chat-item-date text-xs truncate theme-chat-date";
+    dateSpan.textContent = dateTime;
+
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "chat-edit-btn flex-shrink-0 p-0.5 rounded opacity-0 theme-chat-edit";
+    editBtn.title = "Edit title";
+    editBtn.setAttribute("aria-label", "Edit title");
+    editBtn.innerHTML = "<svg class=\"w-4 h-4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z\"/></svg>";
+    editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        startEditChatTitle(li, chat.id, titleSpan);
+    });
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
@@ -498,12 +512,17 @@ function addChatToList(chat, insertAtTop = false) {
             .catch((err) => console.error("Failed to delete chat:", err));
     });
 
-    li.appendChild(starBtn);
-    li.appendChild(contentWrap);
-    li.appendChild(deleteBtn);
+    const row2 = document.createElement("div");
+    row2.className = "chat-item-meta";
+    row2.appendChild(dateSpan);
+    row2.appendChild(editBtn);
+    row2.appendChild(deleteBtn);
+
+    li.appendChild(row1);
+    li.appendChild(row2);
 
     li.addEventListener("click", (e) => {
-        if (e.target.closest(".chat-star-btn") || e.target.closest(".chat-delete-btn")) return;
+        if (e.target.closest(".chat-star-btn") || e.target.closest(".chat-delete-btn") || e.target.closest(".chat-edit-btn") || e.target.closest("input.chat-item-title-input")) return;
         selectChat(chat.id);
     });
 
@@ -513,6 +532,55 @@ function addChatToList(chat, insertAtTop = false) {
         chatListEl.appendChild(li);
     }
     if (insertAtTop) chatListEl.scrollTop = 0;
+}
+
+function startEditChatTitle(li, chatId, titleSpan) {
+    if (!currentDatabase) return;
+    const currentTitle = titleSpan.textContent || "Новый чат";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "chat-item-title-input flex-1 min-w-0 text-inherit bg-transparent border border-solid theme-input rounded px-1 py-0 text-sm";
+    input.value = currentTitle;
+    input.maxLength = 80;
+    input.setAttribute("aria-label", "Chat title");
+
+    const row1 = li.querySelector(".chat-item-row");
+    row1.replaceChild(input, titleSpan);
+    input.focus();
+    input.select();
+
+    function finishEdit(save) {
+        const newTitle = (input.value.trim() || "Новый чат").slice(0, 80);
+        row1.replaceChild(titleSpan, input);
+        if (save && newTitle !== currentTitle) {
+            fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chatId}/title`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ title: newTitle }),
+            })
+                .then((res) => res.json())
+                .then((data) => {
+                    titleSpan.textContent = (data && data.title) || newTitle;
+                    li.title = titleSpan.textContent;
+                })
+                .catch((err) => console.error("Failed to update chat title:", err));
+        } else if (save) {
+            titleSpan.textContent = newTitle;
+            li.title = titleSpan.textContent;
+        }
+    }
+
+    input.addEventListener("blur", () => finishEdit(true));
+    input.addEventListener("keydown", (e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") {
+            e.preventDefault();
+            finishEdit(true);
+        } else if (e.key === "Escape") {
+            e.preventDefault();
+            finishEdit(false);
+        }
+    });
 }
 
 function updateChatActiveState() {
