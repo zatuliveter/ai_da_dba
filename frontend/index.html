@@ -6,7 +6,7 @@
     <title>AI DA DBA</title>
     <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("theme") || "dark");</script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style.css?v=2">
+    <link rel="stylesheet" href="style.css?v=4">
     <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
@@ -52,7 +52,12 @@
             <div class="flex-1 flex flex-col min-h-0 border-t theme-sidebar-border">
                 <div class="flex items-center justify-between px-3 py-2">
                     <span class="text-xs theme-label">Chats</span>
-                    <button id="new-chat-btn" class="text-xs theme-accent disabled:opacity-50" disabled>New chat</button>
+                    <button id="new-chat-btn" class="new-chat-btn text-xs font-medium inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 disabled:opacity-50" disabled>
+                        <svg class="new-chat-btn-icon w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/>
+                        </svg>
+                        New chat
+                    </button>
                 </div>
                 <ul id="chat-list" class="flex-1 overflow-y-auto px-2 pb-2 space-y-0.5"></ul>
             </div>
@@ -96,6 +101,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=2"></script>
+    <script src="app.js"></script>
 </body>
 </html>

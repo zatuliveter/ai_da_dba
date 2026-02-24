@@ -30,6 +30,9 @@
     --toggle-hover: #1f2937;
     --accent: #2563eb;
     --accent-hover: #3b82f6;
+    --accent-bg: rgba(37, 99, 235, 0.15);
+    --accent-bg-hover: rgba(37, 99, 235, 0.25);
+    --accent-focus-ring: rgba(37, 99, 235, 0.25);
     --disabled-bg: #374151;
     --disabled-text: #6b7280;
 }
@@ -65,6 +68,9 @@
     --toggle-hover: #e2e8f0;
     --accent: #2563eb;
     --accent-hover: #1d4ed8;
+    --accent-bg: rgba(37, 99, 235, 0.12);
+    --accent-bg-hover: rgba(37, 99, 235, 0.2);
+    --accent-focus-ring: rgba(37, 99, 235, 0.25);
     --disabled-bg: #e2e8f0;
     --disabled-text: #94a3b8;
 }
@@ -101,7 +107,7 @@ body {
 .theme-input:focus {
     outline: none !important;
     border-color: var(--accent) !important;
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25) !important;
+    box-shadow: 0 0 0 2px var(--accent-focus-ring) !important;
 }
 .theme-accent {
     color: var(--accent) !important;
@@ -175,14 +181,29 @@ aside#sidebar,
 #sidebar .border-t.border-gray-800 {
     border-color: var(--border) !important;
 }
-#sidebar #new-chat-btn {
+#sidebar #new-chat-btn,
+#sidebar .new-chat-btn {
     color: var(--accent) !important;
+    background-color: var(--accent-bg) !important;
+    border: 1px solid var(--accent) !important;
+    cursor: pointer !important;
+    transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
-#sidebar #new-chat-btn:hover:not(:disabled) {
+#sidebar #new-chat-btn:hover:not(:disabled),
+#sidebar .new-chat-btn:hover:not(:disabled) {
     color: var(--accent-hover) !important;
+    background-color: var(--accent-bg-hover) !important;
+    border-color: var(--accent-hover) !important;
 }
-#sidebar #new-chat-btn:disabled {
+#sidebar #new-chat-btn:disabled,
+#sidebar .new-chat-btn:disabled {
     color: var(--disabled-text) !important;
+    background-color: transparent !important;
+    border-color: var(--border-input) !important;
+    cursor: default !important;
+}
+#sidebar #new-chat-btn .new-chat-btn-icon {
+    flex-shrink: 0;
 }
 #sidebar #chat-list .chat-item {
     color: var(--text-secondary) !important;

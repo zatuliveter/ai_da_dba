@@ -15,6 +15,7 @@ let currentDatabase = null;
 let currentChatId = null;
 let databases = []; // [{name, description}]
 let descriptionSaveTimer = null;
+let pendingMessage = null;
 
 // stream state
 let currentStreamDiv = null;
@@ -158,11 +159,18 @@ function handleMessage(data) {
             break;
         case "chat_created":
             if (data.chat) {
-                addChatToList(data.chat);
+                addChatToList(data.chat, true);
                 currentChatId = data.chat.id;
                 updateChatActiveState();
                 clearChatUI();
                 saveState();
+                if (pendingMessage) {
+                    appendUser(pendingMessage);
+                    ws.send(JSON.stringify({ type: "message", content: pendingMessage }));
+                    pendingMessage = null;
+                    setInputEnabled(false);
+                    showSpinner();
+                }
             }
             break;
         case "chat_cleared":
@@ -173,11 +181,15 @@ function handleMessage(data) {
 }
 
 function renderHistory(messages) {
-    clearChatUI();
     if (messages.length === 0) {
-        if (welcomeEl) welcomeEl.style.display = "";
+        const hasUserMessages = chatContainer.querySelector(".msg-user");
+        if (!hasUserMessages) {
+            clearChatUI();
+        }
+        if (welcomeEl && !hasUserMessages) welcomeEl.style.display = "";
         return;
     }
+    clearChatUI();
     hideWelcome();
     for (const msg of messages) {
         if (msg.role === "user") {
@@ -291,7 +303,7 @@ function handleStreamChunk(content) {
 
 function setInputEnabled(enabled) {
     userInput.disabled = !enabled;
-    const canSend = enabled && currentDatabase && currentChatId != null;
+    const canSend = enabled && currentDatabase;
     sendBtn.disabled = !canSend;
     clearChatBtn.disabled = !(currentChatId != null);
     if (enabled) userInput.focus();
@@ -305,13 +317,19 @@ function sendMessage() {
         appendError("Please select a database first.");
         return;
     }
-    if (currentChatId == null) {
-        appendError("Please select or create a chat first.");
-        return;
-    }
     if (!ws || ws.readyState !== WebSocket.OPEN) {
         appendError("WebSocket is not connected. Reconnecting...");
         connectWS();
+        return;
+    }
+
+    if (currentChatId == null) {
+        pendingMessage = text;
+        userInput.value = "";
+        userInput.style.height = "auto";
+        const title = text.split("\n")[0].trim().slice(0, 50) || "Новый чат";
+        ws.send(JSON.stringify({ type: "create_chat", title }));
+        setInputEnabled(false);
         return;
     }
 
@@ -400,7 +418,8 @@ async function loadChats(dbName) {
     try {
         const resp = await fetch(`/api/databases/${encodeURIComponent(dbName)}/chats`);
         const data = await resp.json();
-        const chats = data.chats || [];
+        const chats = (data.chats || []).slice();
+        chats.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
         chatListEl.innerHTML = "";
         for (const chat of chats) {
             addChatToList(chat, false);
@@ -412,23 +431,29 @@ async function loadChats(dbName) {
     }
 }
 
-function addChatToList(chat, scroll = true) {
+function addChatToList(chat, insertAtTop = false) {
     const li = document.createElement("li");
     li.className = "chat-item rounded-lg px-2 py-1.5 text-sm cursor-pointer truncate theme-chat-item";
     li.dataset.chatId = String(chat.id);
     li.title = chat.title || "Chat";
     const title = chat.title || "Новый чат";
-    const date = chat.created_at ? new Date(chat.created_at).toLocaleDateString() : "";
+    const dateTime = chat.created_at
+        ? new Date(chat.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })
+        : "";
     li.textContent = title;
-    if (date) {
+    if (dateTime) {
         const span = document.createElement("span");
         span.className = "block text-xs truncate theme-chat-date";
-        span.textContent = date;
+        span.textContent = dateTime;
         li.appendChild(span);
     }
     li.addEventListener("click", () => selectChat(chat.id));
-    chatListEl.appendChild(li);
-    if (scroll) chatListEl.scrollTop = 0;
+    if (insertAtTop && chatListEl.firstChild) {
+        chatListEl.insertBefore(li, chatListEl.firstChild);
+    } else {
+        chatListEl.appendChild(li);
+    }
+    if (insertAtTop) chatListEl.scrollTop = 0;
 }
 
 function updateChatActiveState() {
