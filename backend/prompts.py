@@ -37,6 +37,7 @@ cardinality estimation issues, ascending key problem.
 ## Response format
 
 - Use Markdown formatting.
+- Get straight to the point.
 - IMPORTANT: Display any database objects using SQL DDL. Show indexes as SQL statements.
 - Show any SQL code blocks with syntax highlighting (```sql ... ```).
 - Be specific — reference actual table/column names from the database.
