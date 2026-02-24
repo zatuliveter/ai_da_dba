@@ -480,6 +480,7 @@ function addChatToList(chat, insertAtTop = false) {
     deleteBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         if (!currentDatabase) return;
+        if (!confirm("Удалить этот чат? Действие нельзя отменить.")) return;
         fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chat.id}`, {
             method: "DELETE",
         })
