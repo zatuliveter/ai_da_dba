@@ -455,7 +455,12 @@ function addChatToList(chat, insertAtTop = false) {
     const titleText = chat.title || "Новый чат";
     const titleSpan = document.createElement("span");
     titleSpan.className = "chat-item-title flex-1 min-w-0 truncate";
-    titleSpan.textContent = titleText;
+    titleSpan.textContent = titleText;    
+    titleSpan.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        setTimeout(() => startEditChatTitle(li, chat.id, titleSpan), 0);
+    });
 
     const row1 = document.createElement("div");
     row1.className = "chat-item-row";
@@ -549,7 +554,11 @@ function startEditChatTitle(li, chatId, titleSpan) {
     input.focus();
     input.select();
 
+    const openedAt = Date.now();
+    const BLUR_GRACE_MS = 200;
+
     function finishEdit(save) {
+        if (Date.now() - openedAt < BLUR_GRACE_MS) return;
         const newTitle = (input.value.trim() || "Новый чат").slice(0, 80);
         row1.replaceChild(titleSpan, input);
         if (save && newTitle !== currentTitle) {
