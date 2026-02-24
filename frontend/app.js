@@ -652,12 +652,14 @@ dbSelect.addEventListener("change", () => {
 
 newChatBtn.addEventListener("click", () => {
     if (!currentDatabase) return;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-        appendError("WebSocket is not connected.");
-        connectWS();
-        return;
+    currentChatId = null;
+    updateChatActiveState();
+    clearChatUI();
+    saveState();
+    setInputEnabled(true);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
     }
-    ws.send(JSON.stringify({ type: "create_chat", title: "Новый чат" }));
 });
 
 function saveState() {
