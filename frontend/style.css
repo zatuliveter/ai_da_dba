@@ -206,7 +206,7 @@ aside#sidebar,
     flex-shrink: 0;
 }
 #sidebar #chat-list .chat-item {
-    color: var(--text-secondary) !important;
+    color: var(--text) !important;
 }
 #sidebar #chat-list .chat-item.theme-chat-item:hover {
     color: var(--text) !important;
