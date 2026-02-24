@@ -220,6 +220,53 @@ aside#sidebar,
     color: var(--text-muted) !important;
 }
 
+/* Chat item row: star + content + delete */
+#sidebar #chat-list .chat-item-row {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+#sidebar #chat-list .chat-item-content {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#sidebar #chat-list .chat-star-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.7;
+}
+#sidebar #chat-list .chat-star-btn:hover {
+    opacity: 1;
+}
+#sidebar #chat-list .theme-chat-star {
+    color: var(--text-muted);
+}
+#sidebar #chat-list .theme-chat-star-filled {
+    color: var(--accent);
+}
+#sidebar #chat-list .chat-delete-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: opacity 0.15s, color 0.15s;
+}
+#sidebar #chat-list .chat-delete-btn:hover {
+    color: var(--error-color);
+}
+#sidebar #chat-list .chat-item:hover .chat-delete-btn {
+    opacity: 1;
+}
+
 #db-select option {
     background-color: var(--bg-surface);
     color: var(--text);

@@ -16,6 +16,9 @@ from store import (
     get_chat_messages,
     append_chat_messages,
     clear_chat,
+    set_chat_starred,
+    delete_chat,
+    get_chat_database_name,
     init_db,
 )
 from tools import TOOL_DEFINITIONS, dispatch_tool
@@ -68,13 +71,56 @@ def api_list_chats(name: str):
 
 @app.post("/api/databases/{name}/chats")
 def api_create_chat(name: str, body: dict = Body(default=None)):
-    """Create a new chat for the database. Body optional: {"title": "..."}. Returns {id, title, created_at}."""
+    """Create a new chat for the database. Body optional: {"title": "..."}. Returns {id, title, created_at, starred}."""
     try:
         title = (body or {}).get("title", "Новый чат") or "Новый чат"
         chat = create_chat(name, title)
         return chat
     except Exception as e:
         log.error("Failed to create chat for %s: %s", name, e)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/databases/{name}/chats/{chat_id}/star")
+def api_set_chat_starred(name: str, chat_id: int, body: dict = Body(default=None)):
+    """Set starred flag. Body: {"starred": true|false}. Chat must belong to this database."""
+    try:
+        db_name = get_chat_database_name(chat_id)
+        if db_name is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Chat not found")
+        if db_name != name:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Chat not found")
+        starred = (body or {}).get("starred", False)
+        set_chat_starred(chat_id, bool(starred))
+        return {"ok": True, "starred": bool(starred)}
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            raise
+        log.error("Failed to set starred for chat %s: %s", chat_id, e)
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/databases/{name}/chats/{chat_id}")
+def api_delete_chat(name: str, chat_id: int):
+    """Delete a chat. Chat must belong to this database."""
+    try:
+        db_name = get_chat_database_name(chat_id)
+        if db_name is None:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Chat not found")
+        if db_name != name:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Chat not found")
+        delete_chat(chat_id)
+        return {"ok": True}
+    except Exception as e:
+        if hasattr(e, "status_code"):
+            raise
+        log.error("Failed to delete chat %s: %s", chat_id, e)
         from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
 

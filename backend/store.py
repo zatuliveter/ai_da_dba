@@ -20,7 +20,8 @@ CREATE TABLE IF NOT EXISTS chats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     database_name TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT 'Новый чат',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    starred INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS chat_messages (
@@ -53,6 +54,12 @@ def init_db() -> None:
     try:
         conn.executescript(_SCHEMA)
         conn.commit()
+        # Migration: add starred column if missing (existing DBs)
+        cur = conn.execute("PRAGMA table_info(chats)")
+        columns = [row[1] for row in cur.fetchall()]
+        if "starred" not in columns:
+            conn.execute("ALTER TABLE chats ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
+            conn.commit()
     finally:
         conn.close()
 
@@ -89,32 +96,37 @@ def set_db_description(name: str, description: str) -> None:
 # ---------------------------------------------------------------------------
 
 def list_chats(database_name: str) -> list[dict]:
-    """Return list of chats for the given database, newest first."""
+    """Return list of chats for the given database, starred first then newest first."""
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, title, created_at FROM chats WHERE database_name = ? "
+            "SELECT id, title, created_at, starred FROM chats WHERE database_name = ? "
             "ORDER BY created_at DESC",
             (database_name,),
         ).fetchall()
         return [
-            {"id": r["id"], "title": r["title"], "created_at": r["created_at"]}
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "created_at": r["created_at"],
+                "starred": bool(r["starred"]),
+            }
             for r in rows
         ]
 
 
 def create_chat(database_name: str, title: str = "Новый чат") -> dict:
-    """Create a new chat for the database. Returns {id, title, created_at}."""
+    """Create a new chat for the database. Returns {id, title, created_at, starred}."""
     init_db()
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO chats (database_name, title, created_at) VALUES (?, ?, ?)",
+            "INSERT INTO chats (database_name, title, created_at, starred) VALUES (?, ?, ?, 0)",
             (database_name, title or "Новый чат", now),
         )
         conn.commit()
         chat_id = cur.lastrowid
-    return {"id": chat_id, "title": title or "Новый чат", "created_at": now}
+    return {"id": chat_id, "title": title or "Новый чат", "created_at": now, "starred": False}
 
 
 def get_chat_messages(chat_id: int) -> list[dict]:
@@ -156,4 +168,33 @@ def update_chat_title(chat_id: int, title: str) -> None:
     init_db()
     with _get_conn() as conn:
         conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
+        conn.commit()
+
+
+def get_chat_database_name(chat_id: int) -> str | None:
+    """Return database_name for the chat, or None if not found."""
+    init_db()
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT database_name FROM chats WHERE id = ?", (chat_id,)
+        ).fetchone()
+        return row["database_name"] if row else None
+
+
+def set_chat_starred(chat_id: int, starred: bool) -> None:
+    """Set or unset the starred flag for a chat."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute(
+            "UPDATE chats SET starred = ? WHERE id = ?",
+            (1 if starred else 0, chat_id),
+        )
+        conn.commit()
+
+
+def delete_chat(chat_id: int) -> None:
+    """Delete a chat and its messages (CASCADE)."""
+    init_db()
+    with _get_conn() as conn:
+        conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
         conn.commit()

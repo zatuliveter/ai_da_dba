@@ -419,7 +419,7 @@ async function loadChats(dbName) {
         const resp = await fetch(`/api/databases/${encodeURIComponent(dbName)}/chats`);
         const data = await resp.json();
         const chats = (data.chats || []).slice();
-        chats.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+        // Backend returns starred first, then by date; keep that order
         chatListEl.innerHTML = "";
         for (const chat of chats) {
             addChatToList(chat, false);
@@ -432,22 +432,88 @@ async function loadChats(dbName) {
 }
 
 function addChatToList(chat, insertAtTop = false) {
+    const starred = !!chat.starred;
     const li = document.createElement("li");
-    li.className = "chat-item rounded-lg px-2 py-1.5 text-sm cursor-pointer truncate theme-chat-item";
+    li.className = "chat-item chat-item-row rounded-lg px-2 py-1.5 text-sm cursor-pointer theme-chat-item";
     li.dataset.chatId = String(chat.id);
     li.title = chat.title || "Chat";
+
+    const starBtn = document.createElement("button");
+    starBtn.type = "button";
+    starBtn.className = "chat-star-btn flex-shrink-0 p-0.5 rounded hover:opacity-100";
+    starBtn.title = starred ? "Unstar" : "Star";
+    starBtn.setAttribute("aria-label", starred ? "Unstar" : "Star");
+    starBtn.innerHTML = starred
+        ? "<svg class=\"w-4 h-4 theme-chat-star-filled\" fill=\"currentColor\" viewBox=\"0 0 24 24\"><path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\"/></svg>"
+        : "<svg class=\"w-4 h-4 theme-chat-star\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><path d=\"M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z\"/></svg>";
+    starBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!currentDatabase) return;
+        const newStarred = !starred;
+        fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chat.id}/star`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ starred: newStarred }),
+        })
+            .then((res) => res.json())
+            .then(() => loadChats(currentDatabase))
+            .catch((err) => console.error("Failed to toggle star:", err));
+    });
+
+    const contentWrap = document.createElement("span");
+    contentWrap.className = "chat-item-content flex-1 min-w-0 truncate";
     const title = chat.title || "Новый чат";
     const dateTime = chat.created_at
         ? new Date(chat.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })
         : "";
-    li.textContent = title;
+    contentWrap.textContent = title;
     if (dateTime) {
-        const span = document.createElement("span");
-        span.className = "block text-xs truncate theme-chat-date";
-        span.textContent = dateTime;
-        li.appendChild(span);
+        const dateSpan = document.createElement("span");
+        dateSpan.className = "block text-xs truncate theme-chat-date";
+        dateSpan.textContent = dateTime;
+        contentWrap.appendChild(dateSpan);
     }
-    li.addEventListener("click", () => selectChat(chat.id));
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.className = "chat-delete-btn flex-shrink-0 p-0.5 rounded opacity-0 theme-chat-delete";
+    deleteBtn.title = "Delete chat";
+    deleteBtn.setAttribute("aria-label", "Delete chat");
+    deleteBtn.innerHTML = "<svg class=\"w-4 h-4\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" d=\"M6 18L18 6M6 6l12 12\"/></svg>";
+    deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!currentDatabase) return;
+        fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chat.id}`, {
+            method: "DELETE",
+        })
+            .then((res) => {
+                if (!res.ok) throw new Error("Delete failed");
+                return res.json();
+            })
+            .then(() => {
+                li.remove();
+                if (currentChatId === chat.id) {
+                    currentChatId = null;
+                    clearChatUI();
+                    updateChatActiveState();
+                    saveState();
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
+                    }
+                }
+            })
+            .catch((err) => console.error("Failed to delete chat:", err));
+    });
+
+    li.appendChild(starBtn);
+    li.appendChild(contentWrap);
+    li.appendChild(deleteBtn);
+
+    li.addEventListener("click", (e) => {
+        if (e.target.closest(".chat-star-btn") || e.target.closest(".chat-delete-btn")) return;
+        selectChat(chat.id);
+    });
+
     if (insertAtTop && chatListEl.firstChild) {
         chatListEl.insertBefore(li, chatListEl.firstChild);
     } else {
