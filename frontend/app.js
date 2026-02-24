@@ -6,7 +6,6 @@ const dbDescriptionWrap = document.getElementById("db-description-wrap");
 const dbDescription = document.getElementById("db-description");
 const chatListEl = document.getElementById("chat-list");
 const newChatBtn = document.getElementById("new-chat-btn");
-const clearChatBtn = document.getElementById("clear-chat-btn");
 const statusDot = document.getElementById("connection-status");
 const userInput = document.getElementById("user-input");
 const sendBtn = document.getElementById("send-btn");
@@ -174,10 +173,6 @@ function handleMessage(data) {
                 }
             }
             break;
-        case "chat_cleared":
-            clearChatUI();
-            setInputEnabled(true);
-            break;
     }
 }
 
@@ -303,7 +298,6 @@ function setInputEnabled(enabled) {
     userInput.disabled = !enabled;
     const canSend = enabled && currentDatabase;
     sendBtn.disabled = !canSend;
-    clearChatBtn.disabled = !(currentChatId != null);
     if (enabled) userInput.focus();
 }
 
@@ -587,12 +581,6 @@ newChatBtn.addEventListener("click", () => {
         return;
     }
     ws.send(JSON.stringify({ type: "create_chat", title: "Новый чат" }));
-});
-
-clearChatBtn.addEventListener("click", () => {
-    if (currentChatId == null) return;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ type: "clear_chat" }));
 });
 
 function saveState() {

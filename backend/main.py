@@ -15,7 +15,6 @@ from store import (
     create_chat,
     get_chat_messages,
     append_chat_messages,
-    clear_chat,
     set_chat_starred,
     delete_chat,
     get_chat_database_name,
@@ -179,15 +178,6 @@ async def ws_chat(ws: WebSocket):
                     "chat": chat,
                 }))
                 await ws.send_text(json.dumps({"type": "history_loaded", "messages": []}))
-                continue
-
-            if payload.get("type") == "clear_chat":
-                if chat_id is None:
-                    await ws.send_text(json.dumps({"type": "error", "content": "No chat selected."}))
-                    continue
-                clear_chat(chat_id)
-                messages.clear()
-                await ws.send_text(json.dumps({"type": "chat_cleared"}))
                 continue
 
             if payload.get("type") == "message":

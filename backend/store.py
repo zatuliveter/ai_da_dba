@@ -155,14 +155,6 @@ def append_chat_messages(chat_id: int, messages: list[dict]) -> None:
         conn.commit()
 
 
-def clear_chat(chat_id: int) -> None:
-    """Delete all messages in the chat."""
-    init_db()
-    with _get_conn() as conn:
-        conn.execute("DELETE FROM chat_messages WHERE chat_id = ?", (chat_id,))
-        conn.commit()
-
-
 def update_chat_title(chat_id: int, title: str) -> None:
     """Update chat title (e.g. after first user message)."""
     init_db()
