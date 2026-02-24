@@ -1,4 +1,5 @@
 const chatContainer = document.getElementById("chat-container");
+const chatInner = document.getElementById("chat-inner");
 const welcomeEl = document.getElementById("welcome");
 const dbSelect = document.getElementById("db-select");
 const dbDescriptionWrap = document.getElementById("db-description-wrap");
@@ -196,7 +197,7 @@ function renderHistory(messages) {
             div.className = "msg-assistant";
             div.innerHTML = renderMarkdown(msg.content || "");
             highlightCodeBlocks(div);
-            chatContainer.appendChild(div);
+            chatInner.appendChild(div);
         }
     }
     scrollToBottom();
@@ -229,7 +230,7 @@ function appendUser(text) {
     const div = document.createElement("div");
     div.className = "msg-user";
     div.textContent = text;
-    chatContainer.appendChild(div);
+    chatInner.appendChild(div);
     scrollToBottom();
 }
 
@@ -243,7 +244,7 @@ function appendToolCall(tool, args) {
     const div = document.createElement("div");
     div.className = "tool-badge";
     div.innerHTML = `<span class="spinner"></span> ${tool}(${argsText})`;
-    chatContainer.appendChild(div);
+    chatInner.appendChild(div);
     scrollToBottom();
 }
 
@@ -251,7 +252,7 @@ function appendSystem(text) {
     const div = document.createElement("div");
     div.className = "msg-system";
     div.textContent = text;
-    chatContainer.appendChild(div);
+    chatInner.appendChild(div);
     scrollToBottom();
 }
 
@@ -259,7 +260,7 @@ function appendError(text) {
     const div = document.createElement("div");
     div.className = "msg-error";
     div.textContent = text;
-    chatContainer.appendChild(div);
+    chatInner.appendChild(div);
     scrollToBottom();
 }
 
@@ -268,7 +269,7 @@ function showSpinner() {
     div.id = "thinking-spinner";
     div.className = "tool-badge";
     div.innerHTML = `<span class="spinner"></span> Thinking...`;
-    chatContainer.appendChild(div);
+    chatInner.appendChild(div);
     scrollToBottom();
 }
 
@@ -289,7 +290,7 @@ function handleStreamChunk(content) {
         removeAllToolBadges();
         currentStreamDiv = document.createElement("div");
         currentStreamDiv.className = "msg-assistant";
-        chatContainer.appendChild(currentStreamDiv);
+        chatInner.appendChild(currentStreamDiv);
     }
     currentStreamContent += content;
     currentStreamDiv.innerHTML = renderMarkdown(currentStreamContent);
