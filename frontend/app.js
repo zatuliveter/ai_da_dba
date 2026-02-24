@@ -182,11 +182,8 @@ function handleMessage(data) {
 
 function renderHistory(messages) {
     if (messages.length === 0) {
-        const hasUserMessages = chatContainer.querySelector(".msg-user");
-        if (!hasUserMessages) {
-            clearChatUI();
-        }
-        if (welcomeEl && !hasUserMessages) welcomeEl.style.display = "";
+        clearChatUI();
+        if (welcomeEl) welcomeEl.style.display = "";
         return;
     }
     clearChatUI();
