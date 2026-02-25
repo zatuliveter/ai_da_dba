@@ -216,8 +216,15 @@ function hideWelcome() {
     if (welcomeEl) welcomeEl.style.display = "none";
 }
 
+const SCROLL_BOTTOM_THRESHOLD = 80;
+
 function scrollToBottom() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+function isUserNearBottom() {
+    const { scrollTop, clientHeight, scrollHeight } = chatContainer;
+    return scrollTop + clientHeight >= scrollHeight - SCROLL_BOTTOM_THRESHOLD;
 }
 
 function appendUser(text) {
@@ -290,7 +297,7 @@ function handleStreamChunk(content) {
     currentStreamContent += content;
     currentStreamDiv.innerHTML = renderMarkdown(currentStreamContent);
     highlightCodeBlocks(currentStreamDiv);
-    scrollToBottom();
+    if (isUserNearBottom()) scrollToBottom();
 }
 // ---------------------------------------------------------------------------
 
