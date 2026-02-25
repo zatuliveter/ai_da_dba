@@ -36,6 +36,9 @@ CREATE INDEX IF NOT EXISTS idx_chats_database_name ON chats(database_name);
 CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id ON chat_messages(chat_id);
 """
 
+# Max length for one message content to avoid DB bloat from runaway model output
+MAX_MESSAGE_CONTENT_LENGTH = 200_000
+
 
 def _ensure_dir():
     DB_DIR.mkdir(parents=True, exist_ok=True)
@@ -141,16 +144,20 @@ def get_chat_messages(chat_id: int) -> list[dict]:
 
 
 def append_chat_messages(chat_id: int, messages: list[dict]) -> None:
-    """Append messages to a chat. Each msg: {role, content}."""
+    """Append messages to a chat. Each msg: {role, content}. Content is truncated to MAX_MESSAGE_CONTENT_LENGTH."""
     if not messages:
         return
     init_db()
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
         for msg in messages:
+            content = msg.get("content") or ""
+            content = content.strip()
+            if len(content) > MAX_MESSAGE_CONTENT_LENGTH:
+                content = content[:MAX_MESSAGE_CONTENT_LENGTH] + "\n\n[... message truncated due to size ...]"
             conn.execute(
                 "INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-                (chat_id, msg["role"], msg.get("content") or "", now),
+                (chat_id, msg["role"], content, now),
             )
         conn.commit()
 
@@ -190,3 +197,18 @@ def delete_chat(chat_id: int) -> None:
     with _get_conn() as conn:
         conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
         conn.commit()
+
+
+def fix_oversized_message_contents(max_length: int = MAX_MESSAGE_CONTENT_LENGTH) -> int:
+    """Replace oversized message content with truncated version. Returns number of rows updated."""
+    init_db()
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, content FROM chat_messages WHERE length(content) > ?",
+            (max_length,),
+        ).fetchall()
+        for row in rows:
+            new_content = row["content"][:max_length] + "\n\n[... сообщение обрезано из-за большого объёма ...]"
+            conn.execute("UPDATE chat_messages SET content = ? WHERE id = ?", (new_content, row["id"]))
+        conn.commit()
+        return len(rows)

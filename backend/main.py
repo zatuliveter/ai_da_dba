@@ -151,6 +151,8 @@ def api_delete_chat(name: str, chat_id: int):
 # ---------------------------------------------------------------------------
 
 MAX_TOOL_ROUNDS = 10
+# Maximum length of the tool result going into the LLM context (protection against bloating from large samples/JSON)
+MAX_TOOL_RESULT_LENGTH = 80_000
 
 
 @app.websocket("/ws")
@@ -220,7 +222,7 @@ async def ws_chat(ws: WebSocket):
                 user_text = payload.get("content", "")
                 messages.append({"role": "user", "content": user_text})
 
-                await _agent_loop(ws, messages, database, chat_id)
+                await _agent_loop(ws, messages, database)
 
                 # Persist the new user + assistant messages to this chat
                 if len(messages) >= 2:
@@ -237,7 +239,7 @@ async def ws_chat(ws: WebSocket):
             pass
 
 
-async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, chat_id: int | None = None):
+async def _agent_loop(ws: WebSocket, messages: list[dict], database: str):
     # System prompt with database context for AI
     description = get_db_description(database) or ""
     db_context = f"\n\nYou are working with database: {database}."
@@ -328,6 +330,8 @@ async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, chat_i
                 }))
 
                 result = dispatch_tool(t_name, t_args, database)
+                if len(result) > MAX_TOOL_RESULT_LENGTH:
+                    result = result[:MAX_TOOL_RESULT_LENGTH] + "\n\n[... result truncated due to size ...]"
                 full_messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
