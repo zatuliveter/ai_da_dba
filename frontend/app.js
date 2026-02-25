@@ -178,6 +178,11 @@ function handleMessage(data) {
 
 function renderHistory(messages) {
     if (messages.length === 0) {
+        const hasContent =
+            chatContainer.querySelector(".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge") ||
+            document.getElementById("thinking-spinner") ||
+            currentStreamDiv;
+        if (hasContent) return;
         clearChatUI();
         if (welcomeEl) welcomeEl.style.display = "";
         return;
