@@ -2,9 +2,10 @@ DEFAULT_ROLE = "assistant"
 
 TOOLS_DESCRIPTION = """
 * When the user sends a SQL query or asks about a table, use the available tools to gather information:
-   - Start with `list_tables` to see what tables exist if you're not sure about the database structure.
-   - Use `get_table_structure` to understand column definitions.
-   - Use `get_indexes` to check existing indexes on relevant tables.
+   - Start with `list_tables` to see what tables exist. Returns: table_schema, table_name, table_type, row_count, data_size_mb, indexes_size_mb.
+   - Use `get_table_structure` to understand column definitions. Also returns: row_count, data_size_mb, index_count, indexes_size_mb, data_space, data_space_type.
+   - Use `get_indexes` to check existing indexes on relevant tables. Returns: 
+    index_name, index_type, is_unique, is_primary_key, key_columns, included_columns, filter_definition, row_count, size_mb, avg_fragmentation_percent, last_stats_update_days_ago, data_space, data_space_type  
    - Use `get_execution_plan` to analyze query performance - this is your most important tool.
    - Use `get_missing_indexes` to check SQL Server's own index recommendations.
    - Use `get_foreign_keys` to understand table relationships.
