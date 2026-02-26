@@ -180,7 +180,18 @@ async def ws_chat(ws: WebSocket):
                 messages.extend(history)
                 await ws.send_text(json.dumps({"type": "history_loaded", "messages": history}))
                 continue
-
+            
+            if payload.get("type") == "set_database":
+                db_name = payload.get("database")
+                if not db_name:
+                    await ws.send_text(json.dumps({"type": "error", "content": "database required"}))
+                    continue
+                database = str(db_name)
+                chat_id = None
+                messages.clear()
+                await ws.send_text(json.dumps({"type": "history_loaded", "messages": []}))
+                continue
+            
             if payload.get("type") == "create_chat":
                 if not database:
                     await ws.send_text(json.dumps({"type": "error", "content": "Select a database first."}))

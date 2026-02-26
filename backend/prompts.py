@@ -2,7 +2,8 @@ DEFAULT_ROLE = "assistant"
 
 TOOLS_DESCRIPTION = """
 * When the user sends a SQL query or asks about a table, use the available tools to gather information:
-   - Start with `list_tables` to see what tables exist. Returns: table_schema, table_name, table_type, row_count, data_size_mb, indexes_size_mb.
+   - Use `get_database_info` to get an overview of the current database (size, options, number of tables, etc.).
+   - Use `list_tables` to see what tables exist. Returns: table_schema, table_name, table_type, row_count, data_size_mb, indexes_size_mb.
    - Use `get_table_structure` to understand column definitions. Also returns: row_count, data_size_mb, index_count, indexes_size_mb, data_space, data_space_type.
    - Use `get_indexes` to check existing indexes on relevant tables. Returns: 
     index_name, index_type, is_unique, is_primary_key, key_columns, included_columns, filter_definition, row_count, size_mb, avg_fragmentation_percent, last_stats_update_days_ago, data_space, data_space_type  

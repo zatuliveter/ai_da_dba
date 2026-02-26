@@ -638,6 +638,8 @@ async function onDatabaseChange(db) {
 
         if (ws && ws.readyState === WebSocket.OPEN) {
             ws.send(JSON.stringify({ type: "set_database", database: db }));
+        } else if (!ws || ws.readyState === WebSocket.CLOSED) {
+            connectWS();
         }
 
         const savedChat = localStorage.getItem("ai_da_dba_chat");
