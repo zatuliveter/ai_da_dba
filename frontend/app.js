@@ -9,6 +9,7 @@ const newChatBtn = document.getElementById("new-chat-btn");
 const statusDot = document.getElementById("connection-status");
 const userInput = document.getElementById("user-input");
 const sendBtn = document.getElementById("send-btn");
+const roleSelect = document.getElementById("role-select");
 
 let ws = null;
 let currentDatabase = null;
@@ -16,6 +17,7 @@ let currentChatId = null;
 let databases = []; // [{name, description}]
 let descriptionSaveTimer = null;
 let pendingMessage = null;
+let currentRole = localStorage.getItem("ai_da_dba_role") || "dba_optimization";
 
 // stream state
 let currentStreamDiv = null;
@@ -85,6 +87,7 @@ function connectWS() {
     ws.onopen = () => {
         console.log("[WS] Connected");
         setStatus("connected");
+        ws.send(JSON.stringify({ type: "set_role", role: currentRole }));
         if (currentDatabase) {
             ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
             if (currentChatId != null) {
@@ -344,6 +347,15 @@ function sendMessage() {
     setInputEnabled(false);
     showSpinner();
 }
+
+roleSelect.value = currentRole;
+roleSelect.addEventListener("change", () => {
+    currentRole = roleSelect.value || "dba";
+    localStorage.setItem("ai_da_dba_role", currentRole);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "set_role", role: currentRole }));
+    }
+});
 
 sendBtn.addEventListener("click", sendMessage);
 

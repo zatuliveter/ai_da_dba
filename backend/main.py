@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 from config import llm_client, LLM_MODEL
 from db import list_databases
-from prompts import SYSTEM_PROMPT
+from prompts import DEFAULT_ROLE, get_system_prompt
 from store import (
     get_db_description,
     set_db_description,
@@ -162,6 +162,7 @@ async def ws_chat(ws: WebSocket):
     messages: list[dict] = []
     database: str | None = None
     chat_id: int | None = None
+    agent_role: str = DEFAULT_ROLE
 
     try:
         while True:
@@ -175,6 +176,16 @@ async def ws_chat(ws: WebSocket):
                 await ws.send_text(json.dumps({
                     "type": "system",
                     "content": f"Connected to database: {database}",
+                }))
+                continue
+
+            if payload.get("type") == "set_role":
+                role = payload.get("role")
+                if isinstance(role, str) and role:
+                    agent_role = role
+                await ws.send_text(json.dumps({
+                    "type": "system",
+                    "content": f"AI role set to: {agent_role}",
                 }))
                 continue
 
@@ -222,7 +233,7 @@ async def ws_chat(ws: WebSocket):
                 user_text = payload.get("content", "")
                 messages.append({"role": "user", "content": user_text})
 
-                await _agent_loop(ws, messages, database)
+                await _agent_loop(ws, messages, database, agent_role)
 
                 # Persist the new user + assistant messages to this chat
                 if len(messages) >= 2:
@@ -239,14 +250,14 @@ async def ws_chat(ws: WebSocket):
             pass
 
 
-async def _agent_loop(ws: WebSocket, messages: list[dict], database: str):
+async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, agent_role: str):
     # System prompt with database context for AI
     description = get_db_description(database) or ""
     db_context = f"\n\nYou are working with database: {database}."
     if description:
         db_context += f" User-provided context: {description}"
     db_context += "\n"
-    system_content = SYSTEM_PROMPT + db_context
+    system_content = get_system_prompt(agent_role) + db_context
 
     # setup messages for the current loop
     full_messages = [{"role": "system", "content": system_content}] + messages
