@@ -169,26 +169,6 @@ async def ws_chat(ws: WebSocket):
             raw = await ws.receive_text()
             payload = json.loads(raw)
 
-            if payload.get("type") == "set_database":
-                database = payload["database"]
-                chat_id = None
-                messages.clear()
-                await ws.send_text(json.dumps({
-                    "type": "system",
-                    "content": f"Connected to database: {database}",
-                }))
-                continue
-
-            if payload.get("type") == "set_role":
-                role = payload.get("role")
-                if isinstance(role, str) and role:
-                    agent_role = role
-                await ws.send_text(json.dumps({
-                    "type": "system",
-                    "content": f"AI role set to: {agent_role}",
-                }))
-                continue
-
             if payload.get("type") == "set_chat":
                 cid = payload.get("chat_id")
                 if cid is None:

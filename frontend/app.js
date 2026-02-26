@@ -145,9 +145,6 @@ function handleMessage(data) {
             appendToolCall(data.tool, data.args);
             showSpinner();
             break;
-        case "system":
-            appendSystem(data.content);
-            break;
         case "error":
             removeSpinner();
             removeAllToolBadges();
@@ -258,13 +255,6 @@ function appendToolCall(tool, args) {
     scrollToBottom();
 }
 
-function appendSystem(text) {
-    const div = document.createElement("div");
-    div.className = "msg-system";
-    div.textContent = text;
-    chatInner.appendChild(div);
-    scrollToBottom();
-}
 
 function appendError(text) {
     const div = document.createElement("div");
