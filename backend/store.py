@@ -4,11 +4,20 @@ DB file: backend/data/app.db (created on first use).
 """
 import os
 import sqlite3
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
 DB_DIR = Path(__file__).resolve().parent / "data"
 DB_PATH = DB_DIR / "app.db"
+
+
+@dataclass(frozen=True)
+class ChatMessage:
+    """A single chat message with strict role and content. Used for history and persistence."""
+    role: str
+    content: str
+
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS database_descriptions (
@@ -132,32 +141,34 @@ def create_chat(database_name: str, title: str = "Новый чат") -> dict:
     return {"id": chat_id, "title": title or "Новый чат", "created_at": now, "starred": False}
 
 
-def get_chat_messages(chat_id: int) -> list[dict]:
-    """Load all messages for a chat as list of {role, content}."""
+def get_chat_messages(chat_id: int) -> list[ChatMessage]:
+    """Load all messages for a chat as list of ChatMessage."""
     init_db()
     with _get_conn() as conn:
         rows = conn.execute(
             "SELECT role, content FROM chat_messages WHERE chat_id = ? ORDER BY id ASC",
             (chat_id,),
         ).fetchall()
-        return [{"role": r["role"], "content": r["content"]} for r in rows]
+        return [
+            ChatMessage(role=r["role"], content=r["content"])
+            for r in rows
+        ]
 
 
-def append_chat_messages(chat_id: int, messages: list[dict]) -> None:
-    """Append messages to a chat. Each msg: {role, content}. Content is truncated to MAX_MESSAGE_CONTENT_LENGTH."""
+def append_chat_messages(chat_id: int, messages: list[ChatMessage]) -> None:
+    """Append messages to a chat. Content is truncated to MAX_MESSAGE_CONTENT_LENGTH."""
     if not messages:
         return
     init_db()
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
         for msg in messages:
-            content = msg.get("content") or ""
-            content = content.strip()
+            content = (msg.content or "").strip()
             if len(content) > MAX_MESSAGE_CONTENT_LENGTH:
                 content = content[:MAX_MESSAGE_CONTENT_LENGTH] + "\n\n[... message truncated due to size ...]"
             conn.execute(
                 "INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-                (chat_id, msg["role"], content, now),
+                (chat_id, msg.role, content, now),
             )
         conn.commit()
 

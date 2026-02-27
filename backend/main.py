@@ -9,6 +9,7 @@ from config import llm_client, LLM_MODEL
 from db import list_databases
 from prompts import DEFAULT_ROLE, get_system_prompt
 from store import (
+    ChatMessage,
     get_db_description,
     set_db_description,
     list_chats,
@@ -159,7 +160,7 @@ MAX_TOOL_RESULT_LENGTH = 80_000
 async def ws_chat(ws: WebSocket):
     await ws.accept()
     init_db()
-    messages: list[dict] = []
+    messages: list[ChatMessage] = []
     database: str | None = None
     chat_id: int | None = None
     agent_role: str = DEFAULT_ROLE
@@ -178,7 +179,10 @@ async def ws_chat(ws: WebSocket):
                 messages.clear()
                 history = get_chat_messages(chat_id)
                 messages.extend(history)
-                await ws.send_text(json.dumps({"type": "history_loaded", "messages": history}))
+                await ws.send_text(json.dumps({
+                    "type": "history_loaded",
+                    "messages": [{"role": m.role, "content": m.content} for m in history],
+                }))
                 continue
             
             if payload.get("type") == "set_database":
@@ -222,7 +226,7 @@ async def ws_chat(ws: WebSocket):
                     continue
 
                 user_text = payload.get("content", "")
-                messages.append({"role": "user", "content": user_text})
+                messages.append(ChatMessage(role="user", content=user_text))
 
                 await _agent_loop(ws, messages, database, agent_role)
 
@@ -241,7 +245,7 @@ async def ws_chat(ws: WebSocket):
             pass
 
 
-async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, agent_role: str):
+async def _agent_loop(ws: WebSocket, messages: list[ChatMessage], database: str, agent_role: str):
     # System prompt with database context for AI
     description = get_db_description(database) or ""
     db_context = f"\n\nYou are working with database: {database}."
@@ -250,8 +254,10 @@ async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, agent_
     db_context += "\n"
     system_content = get_system_prompt(agent_role) + db_context
 
-    # setup messages for the current loop
-    full_messages = [{"role": "system", "content": system_content}] + messages
+    # setup messages for the current loop (API expects list of dicts)
+    full_messages: list[dict] = [{"role": "system", "content": system_content}] + [
+        {"role": m.role, "content": m.content} for m in messages
+    ]
 
     for round_num in range(MAX_TOOL_ROUNDS):
         log.info("Agent round %d, messages: %d", round_num + 1, len(full_messages))
@@ -344,7 +350,7 @@ async def _agent_loop(ws: WebSocket, messages: list[dict], database: str, agent_
             continue
 
         # no tools called, meaning this is the final answer
-        messages.append({"role": "assistant", "content": collected_msg})
+        messages.append(ChatMessage(role="assistant", content=collected_msg))
         await ws.send_text(json.dumps({"type": "stream_end"}))
         return
 
