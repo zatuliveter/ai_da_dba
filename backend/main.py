@@ -156,6 +156,12 @@ MAX_TOOL_ROUNDS = 10
 MAX_TOOL_RESULT_LENGTH = 80_000
 
 
+def _format_tool_call_content(name: str, args: dict) -> str:
+    """Format tool name and args as a single string for chat display, e.g. get_indexes(table_name=Companies, schema=cab)."""
+    parts = [f"{k}={v}" for k, v in (args or {}).items()]
+    return f"{name}({', '.join(parts)})"
+
+
 @app.websocket("/ws")
 async def ws_chat(ws: WebSocket):
     await ws.accept()
@@ -227,12 +233,9 @@ async def ws_chat(ws: WebSocket):
 
                 user_text = payload.get("content", "")
                 messages.append(ChatMessage(role="user", content=user_text))
+                append_chat_messages(chat_id, [messages[-1]])
 
-                await _agent_loop(ws, messages, database, agent_role)
-
-                # Persist the new user + assistant messages to this chat
-                if len(messages) >= 2:
-                    append_chat_messages(chat_id, messages[-2:])
+                await _agent_loop(ws, messages, database, agent_role, chat_id)
                 continue
 
     except WebSocketDisconnect:
@@ -245,7 +248,13 @@ async def ws_chat(ws: WebSocket):
             pass
 
 
-async def _agent_loop(ws: WebSocket, messages: list[ChatMessage], database: str, agent_role: str):
+async def _agent_loop(
+    ws: WebSocket,
+    messages: list[ChatMessage],
+    database: str,
+    agent_role: str,
+    chat_id: int | None,
+):
     # System prompt with database context for AI
     description = get_db_description(database) or ""
     db_context = f"\n\nYou are working with database: {database}."
@@ -254,10 +263,16 @@ async def _agent_loop(ws: WebSocket, messages: list[ChatMessage], database: str,
     db_context += "\n"
     system_content = get_system_prompt(agent_role) + db_context
 
-    # setup messages for the current loop (API expects list of dicts)
-    full_messages: list[dict] = [{"role": "system", "content": system_content}] + [
-        {"role": m.role, "content": m.content} for m in messages
-    ]
+    # Build API messages: Gemini accepts only "user", "assistant", "system", "tool".
+    # History stores "tool_call" for display; convert to "tool" with placeholder result.
+    api_messages: list[dict] = []
+    tool_call_idx = 0
+    for m in messages:
+        if m.role == "tool_call":
+            continue
+        else:
+            api_messages.append({"role": m.role, "content": m.content})
+    full_messages: list[dict] = [{"role": "system", "content": system_content}] + api_messages
 
     for round_num in range(MAX_TOOL_ROUNDS):
         log.info("Agent round %d, messages: %d", round_num + 1, len(full_messages))
@@ -345,12 +360,33 @@ async def _agent_loop(ws: WebSocket, messages: list[ChatMessage], database: str,
                     "tool_call_id": tc["id"],
                     "content": result,
                 })
-            
+
+            # Persist assistant + tool calls to chat (no tool results)
+            if chat_id is not None:
+                to_append: list[ChatMessage] = [
+                    ChatMessage(role="assistant", content=collected_msg or ""),
+                ]
+                for tc in sorted_calls:
+                    t_name = tc["function"]["name"]
+                    try:
+                        t_args = json.loads(tc["function"]["arguments"])
+                    except json.JSONDecodeError:
+                        t_args = {}
+                    to_append.append(
+                        ChatMessage(
+                            role="tool_call",
+                            content=_format_tool_call_content(t_name, t_args),
+                        )
+                    )
+                append_chat_messages(chat_id, to_append)
+
             # go to the next react loop iteration
             continue
 
         # no tools called, meaning this is the final answer
         messages.append(ChatMessage(role=agent_role, content=collected_msg))
+        if chat_id is not None:
+            append_chat_messages(chat_id, [ChatMessage(role=agent_role, content=collected_msg)])
         await ws.send_text(json.dumps({"type": "stream_end"}))
         return
 

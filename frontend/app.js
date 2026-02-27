@@ -135,7 +135,7 @@ function handleMessage(data) {
             handleStreamChunk(data.content);
             break;
         case "stream_end":
-            removeAllToolBadges();
+            markAllToolBadgesDone();
             currentStreamDiv = null;
             currentStreamContent = "";
             setInputEnabled(true);
@@ -193,11 +193,16 @@ function renderHistory(messages) {
         if (msg.role === "user") {
             appendUser(msg.content);
         } else if (msg.role === "assistant") {
-            const div = document.createElement("div");
-            div.className = "msg-assistant";
-            div.innerHTML = renderMarkdown(msg.content || "");
-            highlightCodeBlocks(div);
-            chatInner.appendChild(div);
+            const text = (msg.content || "").trim();
+            if (text) {
+                const div = document.createElement("div");
+                div.className = "msg-assistant";
+                div.innerHTML = renderMarkdown(text);
+                highlightCodeBlocks(div);
+                chatInner.appendChild(div);
+            }
+        } else if (msg.role === "tool_call") {
+            appendToolCallDone(msg.content || "");
         }
     }
     scrollToBottom();
@@ -255,6 +260,16 @@ function appendToolCall(tool, args) {
     scrollToBottom();
 }
 
+/** Append a tool call badge in "done" state (e.g. when loading history). */
+function appendToolCallDone(content) {
+    hideWelcome();
+    const div = document.createElement("div");
+    div.className = "tool-badge tool-badge--done";
+    div.innerHTML = `<span class="tool-done" aria-hidden="true">✓</span> ${content}`;
+    chatInner.appendChild(div);
+    scrollToBottom();
+}
+
 
 function appendError(text) {
     const div = document.createElement("div");
@@ -278,16 +293,33 @@ function removeSpinner() {
     if (el) el.remove();
 }
 
-/** Remove all tool call badges (and thinking spinner) once the assistant reply is shown. */
+/** Remove all tool call badges (and thinking spinner). Used on error. */
 function removeAllToolBadges() {
     chatContainer.querySelectorAll(".tool-badge").forEach((el) => el.remove());
+}
+
+/** On stream_end: remove Thinking spinner, mark each tool badge as done (stop spinner, show checkmark). */
+function markAllToolBadgesDone() {
+    const spinnerEl = document.getElementById("thinking-spinner");
+    if (spinnerEl) spinnerEl.remove();
+    chatContainer.querySelectorAll(".tool-badge").forEach((el) => {
+        const spinner = el.querySelector(".spinner");
+        if (spinner) {
+            spinner.remove();
+            const check = document.createElement("span");
+            check.className = "tool-done";
+            check.innerHTML = "✓";
+            check.setAttribute("aria-hidden", "true");
+            el.insertBefore(check, el.firstChild);
+        }
+        el.classList.add("tool-badge--done");
+    });
 }
 
 function handleStreamChunk(content) {
     if (!content) return;
     if (!currentStreamDiv) {
         hideWelcome();
-        removeAllToolBadges();
         currentStreamDiv = document.createElement("div");
         currentStreamDiv.className = "msg-assistant";
         chatInner.appendChild(currentStreamDiv);

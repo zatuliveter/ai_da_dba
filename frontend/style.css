@@ -452,6 +452,20 @@ header .w-px {
     to { transform: rotate(360deg); }
 }
 
+.tool-badge .tool-done {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    color: var(--tool-spinner-top);
+}
+
+.tool-badge--done .tool-done {
+    flex-shrink: 0;
+}
+
 /* ===== System message ===== */
 .msg-system {
     text-align: center;
