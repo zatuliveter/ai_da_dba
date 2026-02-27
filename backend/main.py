@@ -350,7 +350,7 @@ async def _agent_loop(ws: WebSocket, messages: list[ChatMessage], database: str,
             continue
 
         # no tools called, meaning this is the final answer
-        messages.append(ChatMessage(role="assistant", content=collected_msg))
+        messages.append(ChatMessage(role=agent_role, content=collected_msg))
         await ws.send_text(json.dumps({"type": "stream_end"}))
         return
 
