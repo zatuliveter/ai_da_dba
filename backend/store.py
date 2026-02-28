@@ -21,12 +21,14 @@ class ChatMessage:
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS database_descriptions (
-    name TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
     description TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS chats (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    database_id INTEGER REFERENCES database_descriptions(id) ON DELETE CASCADE,
     database_name TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT 'Новый чат',
     created_at TEXT NOT NULL,
@@ -61,17 +63,58 @@ def _get_conn() -> sqlite3.Connection:
 
 
 def init_db() -> None:
-    """Create DB file and tables if they do not exist."""
+    """Create DB file and tables if they do not exist. Run migrations for existing DBs."""
     conn = _get_conn()
     try:
         conn.executescript(_SCHEMA)
         conn.commit()
+
         # Migration: add starred column if missing (existing DBs)
         cur = conn.execute("PRAGMA table_info(chats)")
         columns = [row[1] for row in cur.fetchall()]
         if "starred" not in columns:
             conn.execute("ALTER TABLE chats ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
             conn.commit()
+
+        # Migration: database_descriptions.id (identity) + chats.database_id
+        cur = conn.execute("PRAGMA table_info(database_descriptions)")
+        dd_columns = [row[1] for row in cur.fetchall()]
+        if "id" not in dd_columns:
+            conn.execute(
+                "CREATE TABLE database_descriptions_new ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                "name TEXT NOT NULL UNIQUE, "
+                "description TEXT NOT NULL DEFAULT ''"
+                ")"
+            )
+            conn.execute(
+                "INSERT INTO database_descriptions_new (name, description) "
+                "SELECT name, description FROM database_descriptions"
+            )
+            conn.execute("DROP TABLE database_descriptions")
+            conn.execute("ALTER TABLE database_descriptions_new RENAME TO database_descriptions")
+            conn.commit()
+
+        cur = conn.execute("PRAGMA table_info(chats)")
+        columns = [row[1] for row in cur.fetchall()]
+        if "database_id" not in columns:
+            conn.execute(
+                "ALTER TABLE chats ADD COLUMN database_id INTEGER REFERENCES database_descriptions(id)"
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO database_descriptions (name, description) "
+                "SELECT DISTINCT database_name, '' FROM chats"
+            )
+            conn.execute(
+                "UPDATE chats SET database_id = ("
+                "SELECT id FROM database_descriptions WHERE database_descriptions.name = chats.database_name"
+                ")"
+            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chats_database_id ON chats(database_id)")
+            conn.commit()
+
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_chats_database_id ON chats(database_id)")
+        conn.commit()
     finally:
         conn.close()
 
@@ -103,6 +146,23 @@ def set_db_description(name: str, description: str) -> None:
         conn.commit()
 
 
+def get_or_create_database_id(name: str) -> int:
+    """Return database_descriptions.id for the given name; create row with empty description if missing."""
+    init_db()
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id FROM database_descriptions WHERE name = ?", (name,)
+        ).fetchone()
+        if row:
+            return row["id"]
+        cur = conn.execute(
+            "INSERT INTO database_descriptions (name, description) VALUES (?, '')",
+            (name,),
+        )
+        conn.commit()
+        return cur.lastrowid
+
+
 # ---------------------------------------------------------------------------
 # Chats
 # ---------------------------------------------------------------------------
@@ -130,11 +190,12 @@ def list_chats(database_name: str) -> list[dict]:
 def create_chat(database_name: str, title: str = "Новый чат") -> dict:
     """Create a new chat for the database. Returns {id, title, created_at, starred}."""
     init_db()
+    database_id = get_or_create_database_id(database_name)
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
         cur = conn.execute(
-            "INSERT INTO chats (database_name, title, created_at, starred) VALUES (?, ?, ?, 0)",
-            (database_name, title or "Новый чат", now),
+            "INSERT INTO chats (database_id, database_name, title, created_at, starred) VALUES (?, ?, ?, ?, 0)",
+            (database_id, database_name, title or "Новый чат", now),
         )
         conn.commit()
         chat_id = cur.lastrowid
