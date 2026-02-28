@@ -577,6 +577,42 @@ header .w-px {
     gap: 0.5rem;
     margin-bottom: 0.5rem;
 }
+.msg-user-file {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.6rem;
+    font-size: 0.8rem;
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 0.5rem;
+    color: inherit;
+    text-decoration: none;
+    min-width: 0;
+}
+.msg-user-file:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: inherit;
+}
+.msg-user-file .attachment-chip-icon {
+    flex-shrink: 0;
+}
+.msg-user-file-name {
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+[data-theme="light"] .msg-user-file {
+    background: rgba(37, 99, 235, 0.12);
+    border-color: rgba(37, 99, 235, 0.25);
+}
+[data-theme="light"] .msg-user-file:hover {
+    background: rgba(37, 99, 235, 0.18);
+    border-color: rgba(37, 99, 235, 0.35);
+}
 .msg-user-text {
     white-space: pre-wrap;
     word-break: break-word;

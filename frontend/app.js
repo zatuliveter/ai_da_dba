@@ -295,13 +295,13 @@ function appendUser(text, attachmentFilenames) {
         const linksWrap = document.createElement("div");
         linksWrap.className = "msg-user-attachments";
         for (const name of attachmentFilenames) {
-            const a = document.createElement("a");
-            a.href = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files/${encodeURIComponent(name)}`;
-            a.target = "_blank";
-            a.rel = "noopener";
-            a.className = "attachment-download-link";
-            a.textContent = "📄 " + name;
-            linksWrap.appendChild(a);
+            const chip = document.createElement("a");
+            chip.href = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files/${encodeURIComponent(name)}`;
+            chip.target = "_blank";
+            chip.rel = "noopener";
+            chip.className = "msg-user-file";
+            chip.innerHTML = `${FILE_ICON_SVG}<span class="msg-user-file-name">${escapeHtml(name)}</span>`;
+            linksWrap.appendChild(chip);
         }
         div.appendChild(linksWrap);
     }
