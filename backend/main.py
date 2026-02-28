@@ -386,13 +386,14 @@ async def _agent_loop(
 
     # Build API messages: Gemini accepts only "user", "assistant", "system", "tool".
     # History stores "tool_call" for display; convert to "tool" with placeholder result.
+    # Normalize roles: only user/assistant/system for API; map agent_role (e.g. "dba") -> "assistant".
     api_messages: list[dict] = []
     tool_call_idx = 0
     for m in messages:
         if m.role == "tool_call":
             continue
-        else:
-            api_messages.append({"role": m.role, "content": m.content})
+        api_role = m.role if m.role in ("user", "system") else "assistant"
+        api_messages.append({"role": api_role, "content": m.content})
     full_messages: list[dict] = [{"role": "system", "content": system_content}] + api_messages
 
     if llm_client is None:
