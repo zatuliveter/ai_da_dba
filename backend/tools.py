@@ -2,7 +2,7 @@ import json
 import re
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from db import execute_query, get_connection, rows_to_json
+from db import MAX_ROWS, execute_query, get_connection, rows_to_json
 
 # ---------------------------------------------------------------------------
 # Tool implementations
@@ -547,7 +547,7 @@ TOOL_DEFINITIONS = [
         "type": "function",
         "function": {
             "name": "execute_read_query",
-            "description": "Execute a read-only SELECT query against the database. Returns up to 50 rows. Only SELECT/WITH statements are allowed.",
+            "description": f"Execute a read-only SELECT query against the database. Returns up to {MAX_ROWS} rows. Only SELECT/WITH statements are allowed.",
             "parameters": {
                 "type": "object",
                 "properties": {

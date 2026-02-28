@@ -71,7 +71,8 @@ marked.setOptions({
 });
 
 function renderMarkdown(text) {
-    return marked.parse(text);
+    const raw = marked.parse(text || "");
+    return typeof DOMPurify !== "undefined" ? DOMPurify.sanitize(raw) : raw;
 }
 
 function highlightCodeBlocks(container) {
@@ -113,7 +114,13 @@ function connectWS() {
     };
 
     ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
+        let data;
+        try {
+            data = JSON.parse(event.data);
+        } catch (e) {
+            console.error("[WS] Invalid JSON:", e);
+            return;
+        }
         console.log("[WS] Message:", data.type, data);
         handleMessage(data);
     };
@@ -316,13 +323,13 @@ function appendUser(text, attachmentFilenames) {
 function appendToolCall(tool, args) {
     hideWelcome();
 
-    const argsText = Object.entries(args)
+    const argsText = Object.entries(args || {})
         .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
         .join(", ");
 
     const div = document.createElement("div");
     div.className = "tool-badge";
-    div.innerHTML = `<span class="spinner"></span> ${tool}(${argsText})`;
+    div.innerHTML = `<span class="spinner"></span> ${escapeHtml(String(tool))}(${escapeHtml(argsText)})`;
     chatInner.appendChild(div);
     scrollToBottom();
 }
@@ -332,7 +339,7 @@ function appendToolCallDone(content) {
     hideWelcome();
     const div = document.createElement("div");
     div.className = "tool-badge tool-badge--done";
-    div.innerHTML = `<span class="tool-done" aria-hidden="true">✓</span> ${content}`;
+    div.innerHTML = `<span class="tool-done" aria-hidden="true">✓</span> ${escapeHtml(String(content || ""))}`;
     chatInner.appendChild(div);
     scrollToBottom();
 }
@@ -591,7 +598,10 @@ function saveDescription() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: desc }),
-    }).catch((e) => console.error("Failed to save description:", e));
+    }).catch((e) => {
+        console.error("Failed to save description:", e);
+        appendError("Failed to save description.");
+    });
     // update local cache
     const d = databases.find((x) => x.name === currentDatabase);
     if (d) d.description = desc;
@@ -653,7 +663,10 @@ function addChatToList(chat, insertAtTop = false) {
         })
             .then((res) => res.json())
             .then(() => loadChats(currentDatabase))
-            .catch((err) => console.error("Failed to toggle star:", err));
+            .catch((err) => {
+                console.error("Failed to toggle star:", err);
+                appendError("Failed to update star.");
+            });
     });
 
     const titleText = chat.title || "Новый чат";
@@ -718,7 +731,10 @@ function addChatToList(chat, insertAtTop = false) {
                     }
                 }
             })
-            .catch((err) => console.error("Failed to delete chat:", err));
+            .catch((err) => {
+                console.error("Failed to delete chat:", err);
+                appendError("Failed to delete chat.");
+            });
     });
 
     const row2 = document.createElement("div");
@@ -776,7 +792,10 @@ function startEditChatTitle(li, chatId, titleSpan) {
                     titleSpan.textContent = (data && data.title) || newTitle;
                     li.title = titleSpan.textContent;
                 })
-                .catch((err) => console.error("Failed to update chat title:", err));
+                .catch((err) => {
+                    console.error("Failed to update chat title:", err);
+                    appendError("Failed to update title.");
+                });
         } else if (save) {
             titleSpan.textContent = newTitle;
             li.title = titleSpan.textContent;

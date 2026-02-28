@@ -99,5 +99,5 @@ def get_system_prompt(role: str | None) -> str:
     
     if role == "assistant":
         return ASSISTANT_PROMPT
-    
-    raise ASSISTANT_PROMPT
+
+    return ASSISTANT_PROMPT

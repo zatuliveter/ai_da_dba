@@ -2,13 +2,14 @@ import json
 import logging
 import os
 import re
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
-from config import llm_client, LLM_MODEL
+from config import llm_client, LLM_MODEL, validate_config
 from db import list_databases
 from prompts import DEFAULT_ROLE, get_system_prompt
 from store import (
@@ -30,7 +31,15 @@ from tools import TOOL_DEFINITIONS, dispatch_tool
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("agent")
 
-app = FastAPI(title="AI da DBA")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_db()
+    validate_config()
+    yield
+
+
+app = FastAPI(title="AI da DBA", lifespan=lifespan)
 
 # ---------------------------------------------------------------------------
 # File attachments: storage root and sanitization
@@ -109,13 +118,7 @@ def api_create_chat(name: str, body: dict = Body(default=None)):
 def api_set_chat_title(name: str, chat_id: int, body: dict = Body(default=None)):
     """Set chat title. Body: {"title": "..."}. Chat must belong to this database."""
     try:
-        db_name = get_chat_database_name(chat_id)
-        if db_name is None:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail="Chat not found")
-        if db_name != name:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail="Chat not found")
+        _require_chat_belongs_to_db(chat_id, name)
         title = (body or {}).get("title", "Новый чат") or "Новый чат"
         update_chat_title(chat_id, title)
         return {"ok": True, "title": title}
@@ -131,13 +134,7 @@ def api_set_chat_title(name: str, chat_id: int, body: dict = Body(default=None))
 def api_set_chat_starred(name: str, chat_id: int, body: dict = Body(default=None)):
     """Set starred flag. Body: {"starred": true|false}. Chat must belong to this database."""
     try:
-        db_name = get_chat_database_name(chat_id)
-        if db_name is None:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail="Chat not found")
-        if db_name != name:
-            from fastapi import HTTPException
-            raise HTTPException(status_code=404, detail="Chat not found")
+        _require_chat_belongs_to_db(chat_id, name)
         starred = (body or {}).get("starred", False)
         set_chat_starred(chat_id, bool(starred))
         return {"ok": True, "starred": bool(starred)}
@@ -153,11 +150,7 @@ def api_set_chat_starred(name: str, chat_id: int, body: dict = Body(default=None
 def api_delete_chat(name: str, chat_id: int):
     """Delete a chat. Chat must belong to this database."""
     try:
-        db_name = get_chat_database_name(chat_id)
-        if db_name is None:
-            raise HTTPException(status_code=404, detail="Chat not found")
-        if db_name != name:
-            raise HTTPException(status_code=404, detail="Chat not found")
+        _require_chat_belongs_to_db(chat_id, name)
         delete_chat(chat_id)
         return {"ok": True}
     except HTTPException:
@@ -177,16 +170,20 @@ def _is_allowed_file(filename: str, content_type: str | None) -> bool:
     return False
 
 
+def _require_chat_belongs_to_db(chat_id: int, name: str) -> str:
+    """Ensure chat exists and belongs to the given database. Return database_name or raise HTTPException(404)."""
+    db_name = get_chat_database_name(chat_id)
+    if db_name is None or db_name != name:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return db_name
+
+
 @app.post("/api/databases/{name}/chats/{chat_id}/files")
 async def api_upload_chat_files(
     name: str, chat_id: int, files: list[UploadFile] = File(default=[])
 ):
     """Upload one or more text files for this chat. Returns uploaded list and optional errors."""
-    db_name = get_chat_database_name(chat_id)
-    if db_name is None:
-        raise HTTPException(status_code=404, detail="Chat not found")
-    if db_name != name:
-        raise HTTPException(status_code=404, detail="Chat not found")
+    _require_chat_belongs_to_db(chat_id, name)
     if not files:
         return {"uploaded": [], "errors": ["No files provided"]}
 
@@ -226,11 +223,7 @@ async def api_upload_chat_files(
 @app.get("/api/databases/{name}/chats/{chat_id}/files/{filename}")
 def api_get_chat_file(name: str, chat_id: int, filename: str):
     """Download a previously uploaded chat file. Filename is sanitized."""
-    db_name = get_chat_database_name(chat_id)
-    if db_name is None:
-        raise HTTPException(status_code=404, detail="Chat not found")
-    if db_name != name:
-        raise HTTPException(status_code=404, detail="Chat not found")
+    _require_chat_belongs_to_db(chat_id, name)
     safe = sanitize_filename(filename)
     if not safe:
         raise HTTPException(status_code=400, detail="Invalid filename")
@@ -248,6 +241,14 @@ MAX_TOOL_ROUNDS = 10
 MAX_TOOL_RESULT_LENGTH = 80_000
 
 
+def _parse_tool_args(tc: dict) -> dict:
+    """Parse tool call arguments JSON. Returns {} on decode error."""
+    try:
+        return json.loads(tc["function"]["arguments"])
+    except (json.JSONDecodeError, KeyError, TypeError):
+        return {}
+
+
 def _format_tool_call_content(name: str, args: dict) -> str:
     """Format tool name and args as a single string for chat display, e.g. get_indexes(table_name=Companies, schema=cab)."""
     parts = [f"{k}={v}" for k, v in (args or {}).items()]
@@ -257,7 +258,6 @@ def _format_tool_call_content(name: str, args: dict) -> str:
 @app.websocket("/ws")
 async def ws_chat(ws: WebSocket):
     await ws.accept()
-    init_db()
     messages: list[ChatMessage] = []
     database: str | None = None
     chat_id: int | None = None
@@ -395,6 +395,10 @@ async def _agent_loop(
             api_messages.append({"role": m.role, "content": m.content})
     full_messages: list[dict] = [{"role": "system", "content": system_content}] + api_messages
 
+    if llm_client is None:
+        await ws.send_text(json.dumps({"type": "error", "content": "LLM not configured: set API_KEY and API_URL."}))
+        return
+
     for round_num in range(MAX_TOOL_ROUNDS):
         log.info("Agent round %d, messages: %d", round_num + 1, len(full_messages))
 
@@ -461,11 +465,7 @@ async def _agent_loop(
 
             for tc in sorted_calls:
                 t_name = tc["function"]["name"]
-                try:
-                    t_args = json.loads(tc["function"]["arguments"])
-                except json.JSONDecodeError:
-                    t_args = {}
-
+                t_args = _parse_tool_args(tc)
                 log.info("Tool call: %s(%s)", t_name, t_args)
                 await ws.send_text(json.dumps({
                     "type": "tool_call",
@@ -489,10 +489,7 @@ async def _agent_loop(
                 ]
                 for tc in sorted_calls:
                     t_name = tc["function"]["name"]
-                    try:
-                        t_args = json.loads(tc["function"]["arguments"])
-                    except json.JSONDecodeError:
-                        t_args = {}
+                    t_args = _parse_tool_args(tc)
                     to_append.append(
                         ChatMessage(
                             role="tool_call",
@@ -520,7 +517,8 @@ async def _agent_loop(
 # Serve frontend static files
 # ---------------------------------------------------------------------------
 
-app.mount("/", StaticFiles(directory="../frontend", html=True), name="frontend")
+_frontend_dir = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/", StaticFiles(directory=str(_frontend_dir), html=True), name="frontend")
 
 
 if __name__ == "__main__":

@@ -2,7 +2,6 @@
 SQLite store: database descriptions, chats, and chat messages.
 DB file: backend/data/app.db (created on first use).
 """
-import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -125,7 +124,6 @@ def init_db() -> None:
 
 def get_db_description(name: str) -> str:
     """Return description for a database by name. Empty string if not set."""
-    init_db()
     with _get_conn() as conn:
         row = conn.execute(
             "SELECT description FROM database_descriptions WHERE name = ?",
@@ -136,7 +134,6 @@ def get_db_description(name: str) -> str:
 
 def set_db_description(name: str, description: str) -> None:
     """Insert or replace description for a database."""
-    init_db()
     with _get_conn() as conn:
         conn.execute(
             "INSERT INTO database_descriptions (name, description) VALUES (?, ?) "
@@ -148,7 +145,6 @@ def set_db_description(name: str, description: str) -> None:
 
 def get_or_create_database_id(name: str) -> int:
     """Return database_descriptions.id for the given name; create row with empty description if missing."""
-    init_db()
     with _get_conn() as conn:
         row = conn.execute(
             "SELECT id FROM database_descriptions WHERE name = ?", (name,)
@@ -169,7 +165,6 @@ def get_or_create_database_id(name: str) -> int:
 
 def list_chats(database_name: str) -> list[dict]:
     """Return list of chats for the given database, starred first then newest first."""
-    init_db()
     with _get_conn() as conn:
         rows = conn.execute(
             "SELECT id, title, created_at, starred FROM chats WHERE database_name = ? "
@@ -189,7 +184,6 @@ def list_chats(database_name: str) -> list[dict]:
 
 def create_chat(database_name: str, title: str = "Новый чат") -> dict:
     """Create a new chat for the database. Returns {id, title, created_at, starred}."""
-    init_db()
     database_id = get_or_create_database_id(database_name)
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
@@ -204,7 +198,6 @@ def create_chat(database_name: str, title: str = "Новый чат") -> dict:
 
 def get_chat_messages(chat_id: int) -> list[ChatMessage]:
     """Load all messages for a chat as list of ChatMessage."""
-    init_db()
     with _get_conn() as conn:
         rows = conn.execute(
             "SELECT role, content FROM chat_messages WHERE chat_id = ? ORDER BY id ASC",
@@ -220,7 +213,6 @@ def append_chat_messages(chat_id: int, messages: list[ChatMessage]) -> None:
     """Append messages to a chat. Content is truncated to MAX_MESSAGE_CONTENT_LENGTH."""
     if not messages:
         return
-    init_db()
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
         for msg in messages:
@@ -236,7 +228,6 @@ def append_chat_messages(chat_id: int, messages: list[ChatMessage]) -> None:
 
 def update_chat_title(chat_id: int, title: str) -> None:
     """Update chat title (e.g. after first user message)."""
-    init_db()
     with _get_conn() as conn:
         conn.execute("UPDATE chats SET title = ? WHERE id = ?", (title, chat_id))
         conn.commit()
@@ -244,7 +235,6 @@ def update_chat_title(chat_id: int, title: str) -> None:
 
 def get_chat_database_name(chat_id: int) -> str | None:
     """Return database_name for the chat, or None if not found."""
-    init_db()
     with _get_conn() as conn:
         row = conn.execute(
             "SELECT database_name FROM chats WHERE id = ?", (chat_id,)
@@ -254,7 +244,6 @@ def get_chat_database_name(chat_id: int) -> str | None:
 
 def set_chat_starred(chat_id: int, starred: bool) -> None:
     """Set or unset the starred flag for a chat."""
-    init_db()
     with _get_conn() as conn:
         conn.execute(
             "UPDATE chats SET starred = ? WHERE id = ?",
@@ -265,7 +254,6 @@ def set_chat_starred(chat_id: int, starred: bool) -> None:
 
 def delete_chat(chat_id: int) -> None:
     """Delete a chat and its messages (CASCADE)."""
-    init_db()
     with _get_conn() as conn:
         conn.execute("DELETE FROM chats WHERE id = ?", (chat_id,))
         conn.commit()
@@ -273,7 +261,6 @@ def delete_chat(chat_id: int) -> None:
 
 def fix_oversized_message_contents(max_length: int = MAX_MESSAGE_CONTENT_LENGTH) -> int:
     """Replace oversized message content with truncated version. Returns number of rows updated."""
-    init_db()
     with _get_conn() as conn:
         rows = conn.execute(
             "SELECT id, content FROM chat_messages WHERE length(content) > ?",
