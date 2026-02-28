@@ -414,6 +414,36 @@ def get_foreign_keys(database: str, table_name: str, schema: str = "dbo") -> str
     return execute_query(database, sql, (schema, table_name, schema, table_name))
 
 
+def get_object_definition(database: str, object_name: str, schema: str = "dbo") -> str:
+    sql = """
+        SELECT
+            sm.definition
+        FROM sys.sql_modules sm
+        WHERE sm.object_id = OBJECT_ID(QUOTENAME(?) + '.' + QUOTENAME(?))
+    """
+    return execute_query(database, sql, (schema, object_name))
+
+
+def list_sql_modules(database: str, object_type: str) -> str:
+    sql = """
+        SELECT
+            s.name AS schema_name,
+            o.name AS object_name,
+            o.type,
+            o.type_desc,
+            o.create_date,
+            o.modify_date
+        FROM sys.sql_modules sm
+        JOIN sys.objects o ON sm.object_id = o.object_id
+        JOIN sys.schemas s ON o.schema_id = s.schema_id
+        WHERE o.type = UPPER(?)
+           OR o.type_desc = UPPER(?)
+        ORDER BY s.name, o.name
+    """
+    object_type_normalized = object_type.strip()
+    return execute_query(database, sql, (object_type_normalized, object_type_normalized))
+
+
 def execute_read_query(database: str, query: str) -> str:
     normalized = re.sub(r"--[^\n]*", "", query)
     normalized = re.sub(r"/\*.*?\*/", "", normalized, flags=re.DOTALL)
@@ -546,6 +576,35 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "get_object_definition",
+            "description": "Get T-SQL definition text for an object (procedure, function, view, trigger, etc.) from sys.sql_modules.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_name": {"type": "string", "description": "Object name"},
+                    "schema": {"type": "string", "description": "Schema name (default: dbo)", "default": "dbo"},
+                },
+                "required": ["object_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_sql_modules",
+            "description": "List SQL modules from sys.sql_modules filtered by object type (for example: P, V, FN, IF, TF, TR or SQL_STORED_PROCEDURE).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "object_type": {"type": "string", "description": "Object type code (P, V, FN, IF, TF, TR) or type_desc value"},
+                },
+                "required": ["object_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "execute_read_query",
             "description": f"Execute a read-only SELECT query against the database. Returns up to {MAX_ROWS} rows. Only SELECT/WITH statements are allowed.",
             "parameters": {
@@ -571,6 +630,8 @@ def dispatch_tool(name: str, args: dict, database: str) -> str:
         "get_execution_plan": lambda a: get_execution_plan(database, a["query"]),
         "get_missing_indexes": lambda a: get_missing_indexes(database, a.get("table_name"), a.get("schema", "dbo")),
         "get_foreign_keys": lambda a: get_foreign_keys(database, a["table_name"], a.get("schema", "dbo")),
+        "get_object_definition": lambda a: get_object_definition(database, a["object_name"], a.get("schema", "dbo")),
+        "list_sql_modules": lambda a: list_sql_modules(database, a["object_type"]),
         "execute_read_query": lambda a: execute_read_query(database, a["query"]),
     }
 

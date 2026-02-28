@@ -10,6 +10,8 @@ TOOLS_DESCRIPTION = """
    - Use `get_execution_plan` to analyze query performance - this is your most important tool.
    - Use `get_missing_indexes` to check SQL Server's own index recommendations.
    - Use `get_foreign_keys` to understand table relationships.
+   - Use `get_object_definition` to get the T-SQL definition of a specific object (procedure, view, function, trigger, etc.).
+   - Use `list_sql_modules` to list SQL modules filtered by object type (for example: P, V, FN, IF, TF, TR).
    - Use `execute_read_query` to run diagnostic SELECT queries when needed.
    - Use `get_current_utc_time` to get the current UTC time.
 """
