@@ -519,11 +519,10 @@ function escapeHtml(s) {
     return div.innerHTML;
 }
 
-attachBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
     const list = Array.from(fileInput.files || []);
-    const allowed = [".txt", ".sql", ".xml", ".json", ".md", ".csv"];
+    const allowed = [".txt", ".sql", ".xml", ".json", ".md", ".csv", ".xdl", ".sqlplan"];
     const isText = (f) => allowed.some((ext) => f.name.toLowerCase().endsWith(ext)) || (f.type && f.type.startsWith("text/"));
     for (const f of list) {
         if (isText(f) && !attachedFiles.some((a) => a.name === f.name && a.size === f.size)) {

@@ -94,9 +94,9 @@
                             rows="3"
                             placeholder="Paste a SQL query or ask a question about your database..."></textarea>
                         <div class="flex flex-col gap-2">
-                            <button type="button" id="attach-btn" class="rounded-xl px-3 py-3 text-sm theme-input flex items-center justify-center" title="Attach files">
+                            <label for="file-input" id="attach-btn" class="attach-btn-label rounded-xl px-3 py-3 text-sm theme-input flex items-center justify-center cursor-pointer" title="Attach files" role="button">
                                 <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.414a4 4 0 00-5.656-5.656l-6.415 6.414a6 6 0 108.486 8.486L20.5 13"/></svg>
-                            </button>
+                            </label>
                             <select id="role-select"
                                 class="rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 theme-input"
                                 title="AI role">
@@ -115,6 +115,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=15"></script>
+    <script src="app.js?v=17"></script>
 </body>
 </html>

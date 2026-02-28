@@ -332,17 +332,19 @@ async def ws_chat(ws: WebSocket):
 
                 combined_parts = []
                 chat_dir = FILES_DIR / str(chat_id)
+                log.info("Message attachments: %s (chat_id=%s, dir=%s)", attachments, chat_id, chat_dir)
                 for name in attachments:
                     safe = sanitize_filename(name)
                     if not safe:
                         continue
                     path = chat_dir / safe
                     if not path.is_file():
-                        log.warning("Attachment not found: %s (chat_id=%s)", safe, chat_id)
+                        log.warning("Attachment not found: %s (chat_id=%s) path=%s", safe, chat_id, path)
                         continue
                     try:
                         content = path.read_text(encoding="utf-8")
                         combined_parts.append(f"Attached file: {safe}\n\n{content}\n\n---\n\n")
+                        log.info("Read attachment %s: %d chars", safe, len(content))
                     except Exception as e:
                         log.warning("Failed to read attachment %s: %s", safe, e)
 
