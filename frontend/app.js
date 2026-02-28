@@ -10,6 +10,9 @@ const statusDot = document.getElementById("connection-status");
 const userInput = document.getElementById("user-input");
 const sendBtn = document.getElementById("send-btn");
 const roleSelect = document.getElementById("role-select");
+const fileInput = document.getElementById("file-input");
+const attachBtn = document.getElementById("attach-btn");
+const attachmentsListWrap = document.getElementById("attachments-list-wrap");
 
 let ws = null;
 let currentDatabase = null;
@@ -17,6 +20,8 @@ let currentChatId = null;
 let databases = []; // [{name, description}]
 let descriptionSaveTimer = null;
 let pendingMessage = null;
+let pendingAttachments = null; // File[] when creating new chat
+let attachedFiles = []; // File[] for current compose
 let currentRole = localStorage.getItem("ai_da_dba_role") || "dba_optimization";
 
 // stream state
@@ -164,12 +169,41 @@ function handleMessage(data) {
                 updateChatActiveState();
                 clearChatUI();
                 saveState();
-                if (pendingMessage) {
-                    appendUser(pendingMessage);
-                    ws.send(JSON.stringify({ type: "message", content: pendingMessage }));
-                    pendingMessage = null;
-                    setInputEnabled(false);
-                    showSpinner();
+                if (pendingMessage != null || (pendingAttachments && pendingAttachments.length)) {
+                    const text = pendingMessage || "";
+                    (async () => {
+                        let savedFilenames = [];
+                        if (pendingAttachments && pendingAttachments.length) {
+                            try {
+                                const form = new FormData();
+                                for (const f of pendingAttachments) {
+                                    form.append("files", f);
+                                }
+                                const url = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files`;
+                                const resp = await fetch(url, { method: "POST", body: form });
+                                if (!resp.ok) throw new Error("Upload failed");
+                                const uploadData = await resp.json();
+                                if (uploadData.errors && uploadData.errors.length) throw new Error(uploadData.errors[0]);
+                                savedFilenames = (uploadData.uploaded || []).map((u) => u.saved_as);
+                            } catch (e) {
+                                appendError("Upload failed: " + e.message);
+                                setInputEnabled(true);
+                                pendingMessage = null;
+                                pendingAttachments = null;
+                                return;
+                            }
+                        }
+                        appendUser(text || "(attachments only)", savedFilenames);
+                        ws.send(JSON.stringify({
+                            type: "message",
+                            content: text,
+                            attachments: savedFilenames,
+                        }));
+                        pendingMessage = null;
+                        pendingAttachments = null;
+                        setInputEnabled(false);
+                        showSpinner();
+                    })();
                 }
             }
             break;
@@ -191,7 +225,8 @@ function renderHistory(messages) {
     hideWelcome();
     for (const msg of messages) {
         if (msg.role === "user") {
-            appendUser(msg.content);
+            const { attachmentNames, userText } = parseUserContent(msg.content);
+            appendUser(userText, attachmentNames.length ? attachmentNames : undefined);
         } else if (msg.role === "assistant") {
             const text = (msg.content || "").trim();
             if (text) {
@@ -237,11 +272,43 @@ function isUserNearBottom() {
     return scrollTop + clientHeight >= scrollHeight - SCROLL_BOTTOM_THRESHOLD;
 }
 
-function appendUser(text) {
+/** Parse user message content that may include "Attached file: name\n\n...\n\n---\n\n" blocks. */
+function parseUserContent(content) {
+    if (!content || !content.includes("\n\n---\n\n")) {
+        return { attachmentNames: [], userText: content || "" };
+    }
+    const parts = content.split("\n\n---\n\n");
+    const userText = (parts.length ? parts[parts.length - 1] : "").trim();
+    const attachmentNames = [];
+    for (let i = 0; i < parts.length - 1; i++) {
+        const m = parts[i].match(/^Attached file: ([^\n]+)/);
+        if (m) attachmentNames.push(m[1].trim());
+    }
+    return { attachmentNames, userText };
+}
+
+function appendUser(text, attachmentFilenames) {
     hideWelcome();
     const div = document.createElement("div");
     div.className = "msg-user";
-    div.textContent = text;
+    if (attachmentFilenames && attachmentFilenames.length) {
+        const linksWrap = document.createElement("div");
+        linksWrap.className = "msg-user-attachments";
+        for (const name of attachmentFilenames) {
+            const a = document.createElement("a");
+            a.href = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files/${encodeURIComponent(name)}`;
+            a.target = "_blank";
+            a.rel = "noopener";
+            a.className = "attachment-download-link";
+            a.textContent = "📎 " + name;
+            linksWrap.appendChild(a);
+        }
+        div.appendChild(linksWrap);
+    }
+    const textNode = document.createElement("div");
+    textNode.className = "msg-user-text";
+    textNode.textContent = text || "";
+    div.appendChild(textNode);
     chatInner.appendChild(div);
     scrollToBottom();
 }
@@ -338,9 +405,29 @@ function setInputEnabled(enabled) {
     if (enabled) userInput.focus();
 }
 
+async function uploadFilesForChat(chatId) {
+    if (!attachedFiles.length) return [];
+    const form = new FormData();
+    for (const f of attachedFiles) {
+        form.append("files", f);
+    }
+    const url = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chatId}/files`;
+    const resp = await fetch(url, { method: "POST", body: form });
+    if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || err.error || `Upload failed: ${resp.status}`);
+    }
+    const data = await resp.json();
+    if (data.errors && data.errors.length) {
+        throw new Error(data.errors.join("; "));
+    }
+    return (data.uploaded || []).map((u) => u.saved_as);
+}
+
 function sendMessage() {
     const text = userInput.value.trim();
-    if (!text) return;
+    const hasAttachments = attachedFiles.length > 0;
+    if (!text && !hasAttachments) return;
 
     if (!currentDatabase) {
         appendError("Please select a database first.");
@@ -354,7 +441,10 @@ function sendMessage() {
 
     if (currentChatId == null) {
         pendingMessage = text;
+        pendingAttachments = attachedFiles.length ? [...attachedFiles] : null;
         userInput.value = "";
+        attachedFiles = [];
+        renderAttachmentsList();
         userInput.style.height = "auto";
         const title = text.split("\n")[0].trim().slice(0, 40) || "Новый чат";
         ws.send(JSON.stringify({ type: "create_chat", title }));
@@ -362,12 +452,31 @@ function sendMessage() {
         return;
     }
 
-    appendUser(text);
-    ws.send(JSON.stringify({ type: "message", content: text }));
-    userInput.value = "";
-    userInput.style.height = "auto";
-    setInputEnabled(false);
-    showSpinner();
+    (async () => {
+        let savedFilenames = [];
+        if (hasAttachments) {
+            try {
+                savedFilenames = await uploadFilesForChat(currentChatId);
+            } catch (e) {
+                appendError("Upload failed: " + e.message);
+                setInputEnabled(true);
+                return;
+            }
+        }
+        const displayText = text || "(attachments only)";
+        appendUser(displayText, savedFilenames);
+        ws.send(JSON.stringify({
+            type: "message",
+            content: text,
+            attachments: savedFilenames,
+        }));
+        userInput.value = "";
+        attachedFiles = [];
+        renderAttachmentsList();
+        userInput.style.height = "auto";
+        setInputEnabled(false);
+        showSpinner();
+    })();
 }
 
 roleSelect.value = currentRole;
@@ -377,6 +486,52 @@ roleSelect.addEventListener("change", () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "set_role", role: currentRole }));
     }
+});
+
+// ---------------------------------------------------------------------------
+// File attachments
+// ---------------------------------------------------------------------------
+
+function renderAttachmentsList() {
+    attachmentsListWrap.innerHTML = "";
+    if (attachedFiles.length === 0) {
+        attachmentsListWrap.classList.add("hidden");
+        return;
+    }
+    attachmentsListWrap.classList.remove("hidden");
+    for (let i = 0; i < attachedFiles.length; i++) {
+        const file = attachedFiles[i];
+        const chip = document.createElement("span");
+        chip.className = "attachment-chip";
+        chip.innerHTML = `<span class="attachment-chip-name">${escapeHtml(file.name)}</span> <button type="button" class="attachment-chip-remove" data-index="${i}" aria-label="Remove">×</button>`;
+        const removeBtn = chip.querySelector(".attachment-chip-remove");
+        removeBtn.addEventListener("click", () => {
+            attachedFiles.splice(i, 1);
+            renderAttachmentsList();
+        });
+        attachmentsListWrap.appendChild(chip);
+    }
+}
+
+function escapeHtml(s) {
+    const div = document.createElement("div");
+    div.textContent = s;
+    return div.innerHTML;
+}
+
+attachBtn.addEventListener("click", () => fileInput.click());
+
+fileInput.addEventListener("change", () => {
+    const list = Array.from(fileInput.files || []);
+    const allowed = [".txt", ".sql", ".xml", ".json", ".md", ".csv"];
+    const isText = (f) => allowed.some((ext) => f.name.toLowerCase().endsWith(ext)) || (f.type && f.type.startsWith("text/"));
+    for (const f of list) {
+        if (isText(f) && !attachedFiles.some((a) => a.name === f.name && a.size === f.size)) {
+            attachedFiles.push(f);
+        }
+    }
+    fileInput.value = "";
+    renderAttachmentsList();
 });
 
 sendBtn.addEventListener("click", sendMessage);

@@ -498,3 +498,67 @@ header .w-px {
     color: var(--text-muted) !important;
 }
 
+/* ===== Attachments (compose + message) ===== */
+.attachments-list-wrap {
+    gap: 0.5rem;
+}
+.attachments-list-wrap.hidden {
+    display: none !important;
+}
+.attachment-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-input);
+    border-radius: 0.5rem;
+    color: var(--text);
+}
+.attachment-chip-name {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.attachment-chip-remove {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0 0.15rem;
+    font-size: 1.1rem;
+    line-height: 1;
+    border-radius: 0.25rem;
+}
+.attachment-chip-remove:hover {
+    color: var(--error-color);
+}
+#attach-btn {
+    cursor: pointer;
+}
+#attach-btn:hover {
+    background-color: var(--toggle-hover) !important;
+}
+
+.msg-user-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+.msg-user-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.attachment-download-link {
+    font-size: 0.85rem;
+    color: var(--accent);
+    text-decoration: none;
+}
+.attachment-download-link:hover {
+    text-decoration: underline;
+    color: var(--accent-hover);
+}
+

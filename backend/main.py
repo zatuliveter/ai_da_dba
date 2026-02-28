@@ -1,7 +1,10 @@
 import json
 import logging
+import os
+import re
+from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body, UploadFile, File, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 
@@ -28,6 +31,25 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("agent")
 
 app = FastAPI(title="AI da DBA")
+
+# ---------------------------------------------------------------------------
+# File attachments: storage root and sanitization
+# ---------------------------------------------------------------------------
+
+FILES_DIR = Path(__file__).resolve().parent / "data" / "files"
+MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
+MAX_FILES_PER_MESSAGE = 10
+ALLOWED_EXTENSIONS = {".txt", ".sql", ".xml", ".json", ".md", ".csv", ".xdl", ".sqlplan"}
+ALLOWED_CONTENT_TYPE_PREFIX = "text/"
+
+
+def sanitize_filename(name: str) -> str:
+    """Return a safe filename: basename only, no .., only word chars, hyphens, dots."""
+    base = os.path.basename(name)
+    if not base:
+        base = "unnamed"
+    safe = re.sub(r"[^\w\-.]", "_", base)
+    return safe or "unnamed"
 
 # ---------------------------------------------------------------------------
 # REST: list available databases (with descriptions from store)
@@ -133,19 +155,89 @@ def api_delete_chat(name: str, chat_id: int):
     try:
         db_name = get_chat_database_name(chat_id)
         if db_name is None:
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Chat not found")
         if db_name != name:
-            from fastapi import HTTPException
             raise HTTPException(status_code=404, detail="Chat not found")
         delete_chat(chat_id)
         return {"ok": True}
+    except HTTPException:
+        raise
     except Exception as e:
-        if hasattr(e, "status_code"):
-            raise
         log.error("Failed to delete chat %s: %s", chat_id, e)
-        from fastapi import HTTPException
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _is_allowed_file(filename: str, content_type: str | None) -> bool:
+    """Allow by extension or text/* content-type."""
+    ext = os.path.splitext(filename)[1].lower()
+    if ext in ALLOWED_EXTENSIONS:
+        return True
+    if content_type and content_type.lower().startswith(ALLOWED_CONTENT_TYPE_PREFIX):
+        return True
+    return False
+
+
+@app.post("/api/databases/{name}/chats/{chat_id}/files")
+async def api_upload_chat_files(
+    name: str, chat_id: int, files: list[UploadFile] = File(default=[])
+):
+    """Upload one or more text files for this chat. Returns uploaded list and optional errors."""
+    db_name = get_chat_database_name(chat_id)
+    if db_name is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if db_name != name:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if not files:
+        return {"uploaded": [], "errors": ["No files provided"]}
+
+    chat_dir = FILES_DIR / str(chat_id)
+    chat_dir.mkdir(parents=True, exist_ok=True)
+    uploaded = []
+    errors = []
+    for f in files[:MAX_FILES_PER_MESSAGE]:
+        original = f.filename or "unnamed"
+        safe = sanitize_filename(original)
+        if not _is_allowed_file(original, f.content_type):
+            errors.append(f"{original}: unsupported type (use .txt, .sql, .xml, .json, .md, .csv or text/*)")
+            continue
+        try:
+            body = await f.read()
+        except Exception as e:
+            errors.append(f"{original}: read failed — {e}")
+            continue
+        if len(body) > MAX_FILE_SIZE_BYTES:
+            errors.append(f"{original}: file too large (max {MAX_FILE_SIZE_BYTES // (1024*1024)} MB)")
+            continue
+        try:
+            decoded = body.decode("utf-8", errors="replace")
+        except Exception:
+            errors.append(f"{original}: not valid text (UTF-8)")
+            continue
+        path = chat_dir / safe
+        try:
+            path.write_text(decoded, encoding="utf-8")
+        except Exception as e:
+            errors.append(f"{original}: write failed — {e}")
+            continue
+        uploaded.append({"filename": original, "saved_as": safe})
+    return {"uploaded": uploaded, "errors": errors if errors else None}
+
+
+@app.get("/api/databases/{name}/chats/{chat_id}/files/{filename}")
+def api_get_chat_file(name: str, chat_id: int, filename: str):
+    """Download a previously uploaded chat file. Filename is sanitized."""
+    db_name = get_chat_database_name(chat_id)
+    if db_name is None:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    if db_name != name:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    safe = sanitize_filename(filename)
+    if not safe:
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    path = FILES_DIR / str(chat_id) / safe
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(path, filename=safe)
 
 # ---------------------------------------------------------------------------
 # WebSocket: chat with agent
@@ -231,8 +323,35 @@ async def ws_chat(ws: WebSocket):
                     }))
                     continue
 
-                user_text = payload.get("content", "")
-                messages.append(ChatMessage(role="user", content=user_text))
+                user_text = (payload.get("content") or "").strip()
+                attachments = payload.get("attachments") or []
+                if isinstance(attachments, list):
+                    attachments = [str(a) for a in attachments]
+                else:
+                    attachments = []
+
+                combined_parts = []
+                chat_dir = FILES_DIR / str(chat_id)
+                for name in attachments:
+                    safe = sanitize_filename(name)
+                    if not safe:
+                        continue
+                    path = chat_dir / safe
+                    if not path.is_file():
+                        log.warning("Attachment not found: %s (chat_id=%s)", safe, chat_id)
+                        continue
+                    try:
+                        content = path.read_text(encoding="utf-8")
+                        combined_parts.append(f"Attached file: {safe}\n\n{content}\n\n---\n\n")
+                    except Exception as e:
+                        log.warning("Failed to read attachment %s: %s", safe, e)
+
+                if combined_parts:
+                    full_content = "".join(combined_parts) + (user_text or "")
+                else:
+                    full_content = user_text or ""
+
+                messages.append(ChatMessage(role="user", content=full_content))
                 append_chat_messages(chat_id, [messages[-1]])
 
                 await _agent_loop(ws, messages, database, agent_role, chat_id)
