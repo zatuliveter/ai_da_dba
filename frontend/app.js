@@ -22,7 +22,7 @@ let descriptionSaveTimer = null;
 let pendingMessage = null;
 let pendingAttachments = null; // File[] when creating new chat
 let attachedFiles = []; // File[] for current compose
-let currentRole = localStorage.getItem("ai_da_dba_role") || "dba_optimization";
+let currentRole = localStorage.getItem("ai_da_dba_role") || "assistant";
 
 // stream state
 let currentStreamDiv = null;
@@ -300,7 +300,7 @@ function appendUser(text, attachmentFilenames) {
             a.target = "_blank";
             a.rel = "noopener";
             a.className = "attachment-download-link";
-            a.textContent = "📎 " + name;
+            a.textContent = "📄 " + name;
             linksWrap.appendChild(a);
         }
         div.appendChild(linksWrap);
@@ -479,9 +479,11 @@ function sendMessage() {
     })();
 }
 
+const validRoles = ["assistant", "dba"];
+if (!validRoles.includes(currentRole)) currentRole = "assistant";
 roleSelect.value = currentRole;
 roleSelect.addEventListener("change", () => {
-    currentRole = roleSelect.value || "dba";
+    currentRole = roleSelect.value || "assistant";
     localStorage.setItem("ai_da_dba_role", currentRole);
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: "set_role", role: currentRole }));
@@ -491,6 +493,8 @@ roleSelect.addEventListener("change", () => {
 // ---------------------------------------------------------------------------
 // File attachments
 // ---------------------------------------------------------------------------
+
+const FILE_ICON_SVG = `<svg class="attachment-chip-icon" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>`;
 
 function renderAttachmentsList() {
     attachmentsListWrap.innerHTML = "";
@@ -503,7 +507,7 @@ function renderAttachmentsList() {
         const file = attachedFiles[i];
         const chip = document.createElement("span");
         chip.className = "attachment-chip";
-        chip.innerHTML = `<span class="attachment-chip-name">${escapeHtml(file.name)}</span> <button type="button" class="attachment-chip-remove" data-index="${i}" aria-label="Remove">×</button>`;
+        chip.innerHTML = `<span class="attachment-chip-left">${FILE_ICON_SVG}<span class="attachment-chip-name">${escapeHtml(file.name)}</span></span><button type="button" class="attachment-chip-remove" data-index="${i}" aria-label="Remove">×</button>`;
         const removeBtn = chip.querySelector(".attachment-chip-remove");
         removeBtn.addEventListener("click", () => {
             attachedFiles.splice(i, 1);

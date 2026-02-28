@@ -6,7 +6,7 @@
     <title>AI da DBA</title>
     <script>document.documentElement.setAttribute("data-theme", localStorage.getItem("theme") || "dark");</script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="style.css?v=7">
+    <link rel="stylesheet" href="style.css?v=8">
     <link id="hljs-theme" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/sql.min.js"></script>
@@ -66,7 +66,7 @@
         <!-- Right column: chat + input -->
         <div class="flex-1 flex flex-col min-h-0 min-w-0">
             <!-- Chat area -->
-            <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-6 flex flex-col theme-body">
+            <main id="chat-container" class="flex-1 overflow-y-auto px-4 py-3 flex flex-col theme-body">
                 <div id="chat-inner" class="max-w-4xl mx-auto w-full flex-1 flex flex-col space-y-4">
                     <div id="welcome" class="flex flex-col items-center justify-center flex-1 theme-muted">
                     <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 theme-welcome-icon">
@@ -84,37 +84,37 @@
             </main>
 
             <!-- Input area (only under chat) -->
-            <footer class="border-t px-4 py-3 shrink-0 theme-header">
+            <footer class="border-t px-4 pt-2 pb-3 shrink-0 theme-header">
                 <div class="max-w-4xl mx-auto flex flex-col gap-2">
-                    <div id="attachments-list-wrap" class="attachments-list-wrap flex flex-wrap gap-2 items-center min-h-0"></div>
-                    <div class="flex gap-3 items-end">
+                    <div class="flex flex-wrap items-center gap-2">
                         <input type="file" id="file-input" accept=".txt,.sql,.xml,.json,.md,.csv,text/*" multiple class="hidden">
+                        <select id="role-select"
+                            class="footer-control-compact rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 theme-input"
+                            title="AI role">
+                            <option value="assistant" selected>Assistant</option>
+                            <option value="dba">DBA</option>
+                        </select>
+                        <label for="file-input" id="attach-btn" class="footer-control-compact attach-btn-label rounded-lg px-2.5 py-1.5 text-sm theme-input flex items-center justify-center cursor-pointer" title="Attach files" role="button">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.414a4 4 0 00-5.656-5.656l-6.415 6.414a6 6 0 108.486 8.486L20.5 13"/></svg>
+                        </label>
+                        <div id="attachments-list-wrap" class="attachments-list-wrap flex flex-wrap gap-2 items-center min-h-0"></div>
+                    </div>
+                    <div class="flex gap-2 items-end">
                         <textarea id="user-input"
                             class="flex-1 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 theme-input"
                             rows="3"
                             placeholder="Paste a SQL query or ask a question about your database..."></textarea>
-                        <div class="flex flex-col gap-2">
-                            <label for="file-input" id="attach-btn" class="attach-btn-label rounded-xl px-3 py-3 text-sm theme-input flex items-center justify-center cursor-pointer" title="Attach files" role="button">
-                                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.414a4 4 0 00-5.656-5.656l-6.415 6.414a6 6 0 108.486 8.486L20.5 13"/></svg>
-                            </label>
-                            <select id="role-select"
-                                class="rounded-xl px-3 py-3 text-sm focus:outline-none focus:ring-2 theme-input"
-                                title="AI role">
-                                <option value="dba">DBA</option>
-                                <option value="assistant">Assistant</option>
-                            </select>
-                            <button id="send-btn"
-                                class="rounded-xl px-5 py-3 text-sm font-medium transition-colors theme-send-btn"
-                                disabled>
-                                Send
-                            </button>
-                        </div>
+                        <button id="send-btn"
+                            class="rounded-xl px-5 py-2.5 text-sm font-medium transition-colors theme-send-btn shrink-0"
+                            disabled>
+                            Send
+                        </button>
                     </div>
                 </div>
             </footer>
         </div>
     </div>
 
-    <script src="app.js?v=17"></script>
+    <script src="app.js?v=19"></script>
 </body>
 </html>
