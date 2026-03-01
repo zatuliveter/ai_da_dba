@@ -279,7 +279,14 @@ async def ws_chat(ws: WebSocket):
                 messages.extend(history)
                 await ws.send_text(json.dumps({
                     "type": "history_loaded",
-                    "messages": [{"role": m.role, "content": m.content} for m in history],
+                    "messages": [
+                        {
+                            "role": m.role,
+                            "content": m.content,
+                            **({"tool_result": m.tool_result} if m.role == "tool_call" and m.tool_result else {}),
+                        }
+                        for m in history
+                    ],
                 }))
                 continue
             
@@ -385,15 +392,33 @@ async def _agent_loop(
     system_content = get_system_prompt(agent_role) + db_context
 
     # Build API messages: Gemini accepts only "user", "assistant", "system", "tool".
-    # History stores "tool_call" for display; convert to "tool" with placeholder result.
-    # Normalize roles: only user/assistant/system for API; map agent_role (e.g. "dba") -> "assistant".
+    # Restore full context from store: user, assistant (with tool_calls when present), tool responses (role "tool").
     api_messages: list[dict] = []
-    tool_call_idx = 0
     for m in messages:
-        if m.role == "tool_call":
-            continue
-        api_role = m.role if m.role in ("user", "system") else "assistant"
-        api_messages.append({"role": api_role, "content": m.content})
+        if m.role == "user" or m.role == "system":
+            api_messages.append({"role": m.role, "content": m.content or ""})
+        elif m.role == "assistant":
+            msg = {"role": "assistant", "content": m.content or ""}
+            if m.tool_calls:
+                # API format: list of {id, type: "function", function: {name, arguments}}
+                msg["tool_calls"] = [
+                    {
+                        "id": tc.get("id", ""),
+                        "type": tc.get("type", "function"),
+                        "function": {
+                            "name": (tc.get("function") or {}).get("name", ""),
+                            "arguments": (tc.get("function") or {}).get("arguments", ""),
+                        },
+                    }
+                    for tc in (m.tool_calls or [])
+                ]
+            api_messages.append(msg)
+        elif m.role == "tool_call" and m.tool_call_id and m.tool_result is not None:
+            api_messages.append({
+                "role": "tool",
+                "tool_call_id": m.tool_call_id,
+                "content": m.tool_result,
+            })
     full_messages: list[dict] = [{"role": "system", "content": system_content}] + api_messages
 
     if llm_client is None:
@@ -482,19 +507,32 @@ async def _agent_loop(
                     "tool_call_id": tc["id"],
                     "content": result,
                 })
+                await ws.send_text(json.dumps({"type": "tool_result", "result": result}))
 
-            # Persist assistant + tool calls to chat (no tool results)
+            # Persist assistant (with tool_calls) + each tool call (with tool_result and tool_call_id)
             if chat_id is not None:
-                to_append: list[ChatMessage] = [
-                    ChatMessage(role="assistant", content=collected_msg or ""),
+                to_append = [
+                    ChatMessage(
+                        role="assistant",
+                        content=collected_msg or "",
+                        tool_calls=sorted_calls,
+                    ),
                 ]
                 for tc in sorted_calls:
                     t_name = tc["function"]["name"]
                     t_args = _parse_tool_args(tc)
+                    # We need to get the result that was stored in full_messages for this tc
+                    tc_id = tc["id"]
+                    result_content = next(
+                        (m["content"] for m in full_messages if m.get("role") == "tool" and m.get("tool_call_id") == tc_id),
+                        "",
+                    )
                     to_append.append(
                         ChatMessage(
                             role="tool_call",
                             content=_format_tool_call_content(t_name, t_args),
+                            tool_result=result_content,
+                            tool_call_id=tc_id,
                         )
                     )
                 append_chat_messages(chat_id, to_append)

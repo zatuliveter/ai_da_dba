@@ -157,6 +157,9 @@ function handleMessage(data) {
             appendToolCall(data.tool, data.args);
             showSpinner();
             break;
+        case "tool_result":
+            appendToolResultToLastBadge(data.result);
+            break;
         case "error":
             removeSpinner();
             removeAllToolBadges();
@@ -220,7 +223,7 @@ function handleMessage(data) {
 function renderHistory(messages) {
     if (messages.length === 0) {
         const hasContent =
-            chatContainer.querySelector(".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge") ||
+            chatContainer.querySelector(".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge, .tool-badge-wrap") ||
             document.getElementById("thinking-spinner") ||
             currentStreamDiv;
         if (hasContent) return;
@@ -244,7 +247,7 @@ function renderHistory(messages) {
                 chatInner.appendChild(div);
             }
         } else if (msg.role === "tool_call") {
-            appendToolCallDone(msg.content || "");
+            appendToolCallDone(msg.content || "", msg.tool_result);
         }
     }
     scrollToBottom();
@@ -254,7 +257,7 @@ function clearChatUI() {
     currentStreamDiv = null;
     currentStreamContent = "";
     const msgs = chatContainer.querySelectorAll(
-        ".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge"
+        ".msg-user, .msg-assistant, .msg-system, .msg-error, .tool-badge, .tool-badge-wrap"
     );
     msgs.forEach((m) => m.remove());
     if (welcomeEl) welcomeEl.style.display = "";
@@ -329,18 +332,61 @@ function appendToolCall(tool, args) {
 
     const div = document.createElement("div");
     div.className = "tool-badge";
-    div.innerHTML = `<span class="spinner"></span> ${escapeHtml(String(tool))}(${escapeHtml(argsText)})`;
+    div.setAttribute("data-no-result", "true");
+    div.innerHTML = `<span class="tool-badge__line"><span class="spinner"></span> ${escapeHtml(String(tool))}(${escapeHtml(argsText)})</span>`;
     chatInner.appendChild(div);
     scrollToBottom();
 }
 
-/** Append a tool call badge in "done" state (e.g. when loading history). */
-function appendToolCallDone(content) {
+/** Attach tool result to the last tool badge that does not have a result yet (during stream). */
+function appendToolResultToLastBadge(result) {
+    const badges = chatContainer.querySelectorAll(".tool-badge[data-no-result=\"true\"]");
+    const last = badges.length ? badges[badges.length - 1] : null;
+    if (!last) return;
+    last.removeAttribute("data-no-result");
+    const spoiler = makeToolResultSpoiler(result);
+    last.appendChild(spoiler);
+    scrollToBottom();
+}
+
+/** Build a collapsible spoiler element for tool result (YAML). */
+function makeToolResultSpoiler(resultText) {
+    const wrap = document.createElement("div");
+    wrap.className = "tool-result-spoiler";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "tool-result-spoiler__toggle";
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.textContent = "Результат (YAML)";
+    const body = document.createElement("div");
+    body.className = "tool-result-spoiler__body";
+    const pre = document.createElement("pre");
+    pre.textContent = resultText || "";
+    body.appendChild(pre);
+    wrap.appendChild(toggle);
+    wrap.appendChild(body);
+    toggle.addEventListener("click", () => {
+        const expanded = toggle.getAttribute("aria-expanded") === "true";
+        toggle.setAttribute("aria-expanded", !expanded);
+        wrap.classList.toggle("tool-result-spoiler--open", !expanded);
+        toggle.textContent = !expanded ? "Свернуть" : "Результат (YAML)";
+    });
+    return wrap;
+}
+
+/** Append a tool call badge in "done" state (e.g. when loading history). Optional toolResult shows in a collapsed spoiler. */
+function appendToolCallDone(content, toolResult) {
     hideWelcome();
+    const wrap = document.createElement("div");
+    wrap.className = "tool-badge-wrap";
     const div = document.createElement("div");
     div.className = "tool-badge tool-badge--done";
     div.innerHTML = `<span class="tool-done" aria-hidden="true">✓</span> ${escapeHtml(String(content || ""))}`;
-    chatInner.appendChild(div);
+    wrap.appendChild(div);
+    if (toolResult != null && String(toolResult).trim() !== "") {
+        wrap.appendChild(makeToolResultSpoiler(toolResult));
+    }
+    chatInner.appendChild(wrap);
     scrollToBottom();
 }
 
@@ -379,12 +425,13 @@ function markAllToolBadgesDone() {
     chatContainer.querySelectorAll(".tool-badge").forEach((el) => {
         const spinner = el.querySelector(".spinner");
         if (spinner) {
-            spinner.remove();
+            const parent = spinner.parentElement;
             const check = document.createElement("span");
             check.className = "tool-done";
             check.innerHTML = "✓";
             check.setAttribute("aria-hidden", "true");
-            el.insertBefore(check, el.firstChild);
+            if (parent) parent.insertBefore(check, spinner);
+            spinner.remove();
         }
         el.classList.add("tool-badge--done");
     });

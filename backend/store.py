@@ -2,6 +2,7 @@
 SQLite store: database descriptions, chats, and chat messages.
 DB file: backend/data/app.db (created on first use).
 """
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -16,6 +17,9 @@ class ChatMessage:
     """A single chat message with strict role and content. Used for history and persistence."""
     role: str
     content: str
+    tool_result: str | None = None
+    tool_call_id: str | None = None
+    tool_calls: list | None = None
 
 
 _SCHEMA = """
@@ -114,6 +118,20 @@ def init_db() -> None:
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chats_database_id ON chats(database_id)")
         conn.commit()
+
+        # Migration: add tool_result, tool_call_id, tool_calls_json to chat_messages
+        cur = conn.execute("PRAGMA table_info(chat_messages)")
+        cm_columns = [row[1] for row in cur.fetchall()]
+        if "tool_result" not in cm_columns:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN tool_result TEXT")
+            conn.commit()
+        if "tool_call_id" not in cm_columns:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN tool_call_id TEXT")
+            conn.commit()
+        if "tool_calls_json" not in cm_columns:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN tool_calls_json TEXT")
+            conn.commit()
+
     finally:
         conn.close()
 
@@ -200,17 +218,31 @@ def get_chat_messages(chat_id: int) -> list[ChatMessage]:
     """Load all messages for a chat as list of ChatMessage."""
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT role, content FROM chat_messages WHERE chat_id = ? ORDER BY id ASC",
+            "SELECT role, content, tool_result, tool_call_id, tool_calls_json FROM chat_messages WHERE chat_id = ? ORDER BY id ASC",
             (chat_id,),
         ).fetchall()
-        return [
-            ChatMessage(role=r["role"], content=r["content"])
-            for r in rows
-        ]
+        out = []
+        for r in rows:
+            tool_calls = None
+            if r["tool_calls_json"]:
+                try:
+                    tool_calls = json.loads(r["tool_calls_json"])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+            out.append(
+                ChatMessage(
+                    role=r["role"],
+                    content=r["content"] or "",
+                    tool_result=r["tool_result"] if r["tool_result"] else None,
+                    tool_call_id=r["tool_call_id"] if r["tool_call_id"] else None,
+                    tool_calls=tool_calls,
+                )
+            )
+        return out
 
 
 def append_chat_messages(chat_id: int, messages: list[ChatMessage]) -> None:
-    """Append messages to a chat. Content is truncated to MAX_MESSAGE_CONTENT_LENGTH."""
+    """Append messages to a chat. Content and tool_result are truncated to MAX_MESSAGE_CONTENT_LENGTH."""
     if not messages:
         return
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -219,9 +251,19 @@ def append_chat_messages(chat_id: int, messages: list[ChatMessage]) -> None:
             content = (msg.content or "").strip()
             if len(content) > MAX_MESSAGE_CONTENT_LENGTH:
                 content = content[:MAX_MESSAGE_CONTENT_LENGTH] + "\n\n[... message truncated due to size ...]"
+            tool_result = getattr(msg, "tool_result", None) or None
+            if tool_result and len(tool_result) > MAX_MESSAGE_CONTENT_LENGTH:
+                tool_result = tool_result[:MAX_MESSAGE_CONTENT_LENGTH] + "\n\n[... result truncated due to size ...]"
+            tool_call_id = getattr(msg, "tool_call_id", None) or None
+            tool_calls_json = None
+            if getattr(msg, "tool_calls", None):
+                try:
+                    tool_calls_json = json.dumps(msg.tool_calls)
+                except (TypeError, ValueError):
+                    pass
             conn.execute(
-                "INSERT INTO chat_messages (chat_id, role, content, created_at) VALUES (?, ?, ?, ?)",
-                (chat_id, msg.role, content, now),
+                "INSERT INTO chat_messages (chat_id, role, content, created_at, tool_result, tool_call_id, tool_calls_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (chat_id, msg.role, content, now, tool_result, tool_call_id, tool_calls_json),
             )
         conn.commit()
 

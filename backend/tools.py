@@ -1,8 +1,8 @@
-import json
 import re
+import yaml
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from db import MAX_ROWS, execute_query, get_connection, rows_to_json
+from db import MAX_ROWS, execute_query, get_connection
 
 # ---------------------------------------------------------------------------
 # Tool implementations
@@ -177,10 +177,10 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
 			) ds
     """
     params = (schema, table_name)
-    columns_json = execute_query(database, columns_sql, params)
-    stats_json = execute_query(database, stats_sql, params)
-    columns = json.loads(columns_json)
-    stats_list = json.loads(stats_json)
+    columns_yaml = execute_query(database, columns_sql, params)
+    stats_yaml = execute_query(database, stats_sql, params)
+    columns = yaml.safe_load(columns_yaml) or []
+    stats_list = yaml.safe_load(stats_yaml) or []
     stats_row = stats_list[0] if stats_list else {}
     combined = {
         "columns": columns,
@@ -191,7 +191,7 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
         "data_space": stats_row.get("data_space"),
         "data_space_type": stats_row.get("data_space_type")
     }
-    return json.dumps(combined, default=str, ensure_ascii=False)
+    return yaml.dump(combined, allow_unicode=True)
 
 
 def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
@@ -268,7 +268,7 @@ def get_execution_plan(database: str, query: str) -> str:
         cursor.execute("SET SHOWPLAN_XML OFF")
 
     if not row:
-        return json.dumps({"error": "No execution plan returned"})
+        return yaml.dump({"error": "No execution plan returned"}, allow_unicode=True)
 
     xml_plan = row[0]
     return _parse_execution_plan(xml_plan)
@@ -280,7 +280,7 @@ def _parse_execution_plan(xml_plan: str) -> str:
     try:
         root = ET.fromstring(xml_plan)
     except ET.ParseError:
-        return json.dumps({"raw_plan": xml_plan[:4000]})
+        return yaml.dump({"raw_plan": xml_plan[:4000]}, allow_unicode=True)
 
     statements = []
     for stmt in root.findall(".//sp:StmtSimple", ns):
@@ -356,7 +356,7 @@ def _parse_execution_plan(xml_plan: str) -> str:
     if missing_indexes:
         result["missing_indexes"] = missing_indexes
 
-    return json.dumps(result, default=str, ensure_ascii=False)
+    return yaml.dump(result, allow_unicode=True)
 
 
 def get_missing_indexes(database: str, table_name: str | None = None, schema: str = "dbo") -> str:
@@ -450,14 +450,14 @@ def execute_read_query(database: str, query: str) -> str:
     normalized = normalized.strip().upper()
 
     if not normalized.startswith("SELECT") and not normalized.startswith("WITH"):
-        return json.dumps({"error": "Only SELECT queries are allowed"})
+        return yaml.dump({"error": "Only SELECT queries are allowed"}, allow_unicode=True)
 
     forbidden = ["INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
                  "TRUNCATE", "EXEC", "EXECUTE", "MERGE", "GRANT", "REVOKE"]
     tokens = re.findall(r'\b[A-Z]+\b', normalized)
     for token in tokens:
         if token in forbidden:
-            return json.dumps({"error": f"Forbidden keyword: {token}"})
+            return yaml.dump({"error": f"Forbidden keyword: {token}"}, allow_unicode=True)
 
     return execute_query(database, query)
 
@@ -637,9 +637,9 @@ def dispatch_tool(name: str, args: dict, database: str) -> str:
 
     handler = handlers.get(name)
     if not handler:
-        return json.dumps({"error": f"Unknown tool: {name}"})
+        return yaml.dump({"error": f"Unknown tool: {name}"}, allow_unicode=True)
 
     try:
         return handler(args)
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return yaml.dump({"error": str(e)}, allow_unicode=True)

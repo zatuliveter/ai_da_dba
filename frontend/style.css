@@ -426,10 +426,19 @@ header .w-px {
 }
 
 /* ===== Tool call badge ===== */
+.tool-badge-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+}
+
 .tool-badge {
     display: inline-flex;
+    flex-direction: row;
     align-items: center;
-    gap: 0.4rem;
+    flex-wrap: wrap;
+    gap: 0.25rem;
     background: var(--tool-bg);
     border: 1px solid var(--tool-border);
     border-radius: 0.5rem;
@@ -437,6 +446,17 @@ header .w-px {
     font-size: 0.78rem;
     color: var(--tool-color);
     font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+}
+
+.tool-badge:has(.tool-result-spoiler) {
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.tool-badge__line {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
 }
 
 .tool-badge .spinner {
@@ -464,6 +484,50 @@ header .w-px {
 
 .tool-badge--done .tool-done {
     flex-shrink: 0;
+}
+
+/* ===== Tool result spoiler (collapsed by default) ===== */
+.tool-result-spoiler {
+    width: 100%;
+    min-width: 0;
+}
+
+.tool-result-spoiler__toggle {
+    background: none;
+    border: none;
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0.2rem 0;
+    text-align: left;
+    font-family: inherit;
+}
+
+.tool-result-spoiler__toggle:hover {
+    text-decoration: underline;
+}
+
+.tool-result-spoiler__body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease-out;
+}
+
+.tool-result-spoiler--open .tool-result-spoiler__body {
+    max-height: 60vh;
+    overflow: auto;
+}
+
+.tool-result-spoiler__body pre {
+    margin: 0.35rem 0 0 0;
+    padding: 0.5rem 0.6rem;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    background: var(--code-block-bg);
+    border-radius: 0.375rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
 }
 
 /* ===== System message ===== */

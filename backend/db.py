@@ -1,5 +1,5 @@
-import json
 import pyodbc
+import yaml
 from config import SQL_SERVER
 
 MAX_ROWS = 1000
@@ -31,7 +31,7 @@ def list_databases() -> list[str]:
         return [row[0] for row in cursor.fetchall()]
 
 
-def rows_to_json(cursor: pyodbc.Cursor, max_rows: int = MAX_ROWS) -> str:
+def rows_to_yaml(cursor: pyodbc.Cursor, max_rows: int = MAX_ROWS) -> str:
     columns = [desc[0] for desc in cursor.description]
     rows = cursor.fetchmany(max_rows + 1)
 
@@ -45,17 +45,20 @@ def rows_to_json(cursor: pyodbc.Cursor, max_rows: int = MAX_ROWS) -> str:
         for col, val in zip(columns, row):
             if isinstance(val, (bytes, bytearray)):
                 record[col] = val.hex()
-            else:
+            elif isinstance(val, (str, int, float, bool, type(None))):
                 record[col] = val
+            else:
+                record[col] = str(val)
         result.append(record)
 
     if truncated:
-        return json.dumps(
-            {"rows": result, "truncated": True, "note": f"Showing first {max_rows} rows"},
-            default=str,
-            ensure_ascii=False,
-        )
-    return json.dumps(result, default=str, ensure_ascii=False)
+        data = {
+            "rows": result,
+            "truncated": True,
+            "note": f"Showing first {max_rows} rows",
+        }
+        return yaml.dump(data, allow_unicode=True)
+    return yaml.dump(result, allow_unicode=True)
 
 
 def execute_query(database: str, sql: str, params: tuple = ()) -> str:
@@ -63,5 +66,5 @@ def execute_query(database: str, sql: str, params: tuple = ()) -> str:
         cursor = conn.cursor()
         cursor.execute(sql, params)
         if cursor.description:
-            return rows_to_json(cursor)
-        return json.dumps({"affected_rows": cursor.rowcount})
+            return rows_to_yaml(cursor)
+        return yaml.dump({"affected_rows": cursor.rowcount}, allow_unicode=True)
