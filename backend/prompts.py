@@ -14,6 +14,7 @@ TOOLS_DESCRIPTION = """
    - Use `list_sql_modules` to list SQL modules filtered by object type (for example: P, V, FN, IF, TF, TR).
    - Use `execute_read_query` to run diagnostic SELECT queries when needed.
    - Use `get_current_utc_time` to get the current UTC time.
+Note: Do not call tool again if you already did it before and have the information, for example if you already checked table structure and indexes, do not check them again, use the information you have to analyze the query and provide recommendations.
 """
 
 DBA_SYSTEM_PROMPT = f"""
