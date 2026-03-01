@@ -381,11 +381,11 @@ function appendToolCallDone(content, toolResult) {
     wrap.className = "tool-badge-wrap";
     const div = document.createElement("div");
     div.className = "tool-badge tool-badge--done";
-    div.innerHTML = `<span class="tool-done" aria-hidden="true">✓</span> ${escapeHtml(String(content || ""))}`;
-    wrap.appendChild(div);
+    div.innerHTML = `<span class="tool-badge__line"><span class="tool-done" aria-hidden="true">&#10003;</span> ${escapeHtml(String(content || ""))}</span>`;
     if (toolResult != null && String(toolResult).trim() !== "") {
-        wrap.appendChild(makeToolResultSpoiler(toolResult));
+        div.appendChild(makeToolResultSpoiler(toolResult));
     }
+    wrap.appendChild(div);
     chatInner.appendChild(wrap);
     scrollToBottom();
 }
