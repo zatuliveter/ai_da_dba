@@ -255,6 +255,23 @@ def _format_tool_call_content(name: str, args: dict) -> str:
     return f"{name}({', '.join(parts)})"
 
 
+def _extract_cached_tokens(usage_data: dict) -> int | None:
+    """Best-effort extraction of cached token count across Gemini/OpenAI-compatible shapes."""
+    if not isinstance(usage_data, dict):
+        return None
+    candidates = [
+        usage_data.get("cachedContentTokenCount"),
+        usage_data.get("cached_content_token_count"),
+        (usage_data.get("usageMetadata") or {}).get("cachedContentTokenCount"),
+        (usage_data.get("prompt_tokens_details") or {}).get("cached_tokens"),
+        (usage_data.get("input_tokens_details") or {}).get("cached_tokens"),
+    ]
+    for value in candidates:
+        if isinstance(value, int):
+            return value
+    return None
+
+
 @app.websocket("/ws")
 async def ws_chat(ws: WebSocket):
     await ws.accept()
@@ -435,7 +452,8 @@ async def _agent_loop(
                 messages=full_messages,
                 tools=TOOL_DEFINITIONS,
                 temperature=0.2,
-                stream=True, 
+                stream=True,
+                stream_options={"include_usage": True},
             )
         except Exception as e:
             log.error("LLM call failed: %s", e)
@@ -448,6 +466,20 @@ async def _agent_loop(
 
         # process chunks as they arrive
         for chunk in response:
+            usage = getattr(chunk, "usage", None)
+            if usage:
+                usage_data = usage.model_dump() if hasattr(usage, "model_dump") else usage
+                if isinstance(usage_data, dict):                    
+                    log.info("LLM usage metadata: %s", usage_data)
+                    cached_tokens = _extract_cached_tokens(usage_data)
+                    if cached_tokens is None:
+                        log.info("Gemini cache: MISS (cached tokens=0)")
+                    else:
+                        log.info("Gemini cached tokens=%d)", cached_tokens)
+                else:
+                    log.info("WARN: LLM usage metadata (non-dict): %s", usage_data)
+                            
+
             delta = chunk.choices[0].delta
 
             # stream normal text directly to frontend
