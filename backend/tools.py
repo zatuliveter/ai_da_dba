@@ -80,8 +80,7 @@ def get_database_info(database: str) -> str:
 def list_tables(database: str) -> str:
     sql = """
         select
-            tt.table_schema
-          , tt.table_name
+            concat(tt.table_schema, '.', tt.table_name) as table_name
           , tt.table_type
           , stat.row_count
           , stat.data_size_mb
@@ -99,35 +98,80 @@ def list_tables(database: str) -> str:
                 and t.name = tt.table_name
                 and s.name = tt.table_schema
             ) stat
-        order by table_type, table_schema, table_name
+        order by table_type, table_name
     """
     return execute_query(database, sql)
 
 
 def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> str:
     columns_sql = """
-        SELECT
-            c.COLUMN_NAME,
-            c.DATA_TYPE,
-            c.CHARACTER_MAXIMUM_LENGTH,
-            c.NUMERIC_PRECISION,
-            c.NUMERIC_SCALE,
-            c.IS_NULLABLE,
-            c.COLUMN_DEFAULT,
-            CASE WHEN pk.COLUMN_NAME IS NOT NULL THEN 'YES' ELSE 'NO' END AS IS_PRIMARY_KEY
-        FROM INFORMATION_SCHEMA.COLUMNS c
-        LEFT JOIN (
-            SELECT ku.TABLE_SCHEMA, ku.TABLE_NAME, ku.COLUMN_NAME
-            FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE ku
-                ON tc.CONSTRAINT_NAME = ku.CONSTRAINT_NAME
-                AND tc.TABLE_SCHEMA = ku.TABLE_SCHEMA
-            WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-        ) pk ON c.TABLE_SCHEMA = pk.TABLE_SCHEMA
-            AND c.TABLE_NAME = pk.TABLE_NAME
-            AND c.COLUMN_NAME = pk.COLUMN_NAME
-        WHERE c.TABLE_SCHEMA = ? AND c.TABLE_NAME = ?
-        ORDER BY c.ORDINAL_POSITION
+        select
+            c.name 
+            + ' '
+            + case when ct.SchemaName = 'sys' 
+                then ct.Name + ct.Suffix 
+                else quotename(ct.SchemaName) + '.' + quotename(ct.Name) + ct.Suffix 
+            end 
+            + ct.Collation as [col]
+        from sys.columns c	
+            join sys.databases db on db.name = db_name()
+            outer apply (
+                select schema_name(schema_id) as SchemaName
+                    , case when name='timestamp' then 'rowversion' else name end as Name
+                    , case when max_length = -1 then ''
+                            when c.max_length = -1 then '(max)'
+                            when name like 'n%char' then '(' + cast(c.max_length / 2 as nvarchar) + ')'
+                            when name like '%char' or name like '%binary' then '(' + cast(c.max_length as nvarchar) + ')'
+                            when name in ('datetime2', 'time', 'datetimeoffset') then '(' + cast(c.scale as nvarchar) + ')'
+                            when name in ('decimal', 'numeric') then '(' + cast(c.precision as nvarchar) + ',' + cast(c.scale as nvarchar) + ')'
+                            else ''
+                    end Suffix
+                    , case when c.collation_name is null or c.collation_name = db.collation_name
+                            then '' 
+                            else ' collate ' + c.collation_name 
+                    end Collation
+                    , case 
+                        when name = 'image' then convert(sql_variant, 0x00)
+                        when name = 'text' then convert(sql_variant, '')
+                        when name = 'uniqueidentifier' then convert(sql_variant, '00000000-0000-0000-0000-000000000000')
+                        when name = 'date' then convert(sql_variant, '0001-01-01')
+                        when name = 'time' then convert(sql_variant, '00:00:00')
+                        when name = 'datetime2' then convert(sql_variant, '0001-01-01 00:00:00')
+                        when name = 'datetimeoffset' then convert(sql_variant, '0001-01-01 00:00:00 +00:00')
+                        when name = 'tinyint' then convert(sql_variant, 0)
+                        when name = 'smallint' then convert(sql_variant, -32768)
+                        when name = 'int' then convert(sql_variant, -2147483648)
+                        when name = 'smalldatetime' then convert(sql_variant, '1900-01-01 00:00:00')
+                        when name = 'real' then convert(sql_variant, -3.4028235E+38)
+                        when name = 'money' then convert(sql_variant, -922337203685477.5808)
+                        when name = 'datetime' then convert(sql_variant, '1753-01-01 00:00:00')
+                        when name = 'float' then convert(sql_variant, -1.79E+308)
+                        when name = 'sql_variant' then convert(sql_variant, 0)
+                        when name = 'ntext' then convert(sql_variant, N'')
+                        when name = 'bit' then convert(sql_variant, 0)
+                        when name = 'decimal' then convert(sql_variant, convert(decimal, -999999999999999999))
+                        when name = 'numeric' then convert(sql_variant, convert(numeric, -999999999999999999))
+                        when name = 'smallmoney' then convert(sql_variant, -214748.3648)
+                        when name = 'bigint' then convert(sql_variant, -9223372036854775808)
+                        when name = 'hierarchyid' then convert(sql_variant, 0x)
+                        --when name = 'geometry' then convert(sql_variant, geometry::STGeomFromText('POINT EMPTY', 0))
+                        --when name = 'geography' then convert(sql_variant, geography::STGeomFromText('POINT EMPTY', 4326))
+                        when name = 'varbinary' then convert(sql_variant, 0x00)
+                        when name = 'varchar' then convert(sql_variant, '')
+                        when name = 'binary' then convert(sql_variant, 0x00)
+                        when name = 'char' then convert(sql_variant, ' ')
+                        when name = 'timestamp' then convert(sql_variant, 0x00)
+                        when name = 'nvarchar' then convert(sql_variant, N'')
+                        when name = 'nchar' then convert(sql_variant, N' ')
+                        --when name = 'xml' then convert(sql_variant, convert(xml, ''))
+                        when name = 'sysname' then convert(sql_variant, N'')
+                        else convert(bit, concat('Unsupported data type ', name, '.'))
+                    end as MinValue
+                from sys.types t
+                where user_type_id = c.user_type_id
+            ) ct
+        where c.object_id = object_id(quotename(?) + '.' + quotename(?))
+        order by c.column_id
     """
     stats_sql = """
         with o ( object_id )
@@ -180,10 +224,11 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
     columns_yaml = execute_query(database, columns_sql, params)
     stats_yaml = execute_query(database, stats_sql, params)
     columns = yaml.safe_load(columns_yaml) or []
+    columns_cleared = [item["col"] for item in columns]
     stats_list = yaml.safe_load(stats_yaml) or []
     stats_row = stats_list[0] if stats_list else {}
     combined = {
-        "columns": columns,
+        "columns": columns_cleared,
         "row_count": stats_row.get("row_count"),
         "data_size_mb": stats_row.get("data_size_mb"),
         "index_count": stats_row.get("index_count"),
