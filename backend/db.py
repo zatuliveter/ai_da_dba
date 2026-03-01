@@ -68,3 +68,26 @@ def execute_query(database: str, sql: str, params: tuple = ()) -> str:
         if cursor.description:
             return rows_to_yaml(cursor)
         return yaml.dump({"affected_rows": cursor.rowcount}, allow_unicode=True)
+
+def execute_scalar(database: str, sql: str, params: tuple = ()) -> str | None:
+    with get_connection(database) as conn:
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+
+        # no result set (e.g. update/delete)
+        if not cursor.description:
+            return None
+
+        row = cursor.fetchone()
+
+        # no rows returned
+        if row is None:
+            return None
+
+        value = row[0]
+
+        # sql null
+        if value is None:
+            return None
+
+        return str(value)

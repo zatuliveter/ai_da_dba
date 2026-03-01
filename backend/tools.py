@@ -2,7 +2,7 @@ import re
 import yaml
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
-from db import MAX_ROWS, execute_query, get_connection
+from db import MAX_ROWS, execute_query, execute_scalar, get_connection
 
 # ---------------------------------------------------------------------------
 # Tool implementations
@@ -503,32 +503,28 @@ def get_foreign_keys(database: str, table_name: str, schema: str = "dbo") -> str
 
 def get_object_definition(database: str, object_name: str, schema: str = "dbo") -> str:
     sql = """
-        SELECT
-            sm.definition
-        FROM sys.sql_modules sm
-        WHERE sm.object_id = OBJECT_ID(QUOTENAME(?) + '.' + QUOTENAME(?))
+        select sm.definition
+        from sys.sql_modules sm
+        where sm.object_id = object_id(QUOTENAME(?) + '.' + QUOTENAME(?))
     """
-    return execute_query(database, sql, (schema, object_name))
+    return execute_scalar(database, sql, (schema, object_name))
 
 
 def list_sql_modules(database: str, object_type: str) -> str:
     sql = """
-        SELECT
-            s.name AS schema_name,
-            o.name AS object_name,
-            o.type,
-            o.type_desc,
-            o.create_date,
-            o.modify_date
-        FROM sys.sql_modules sm
-        JOIN sys.objects o ON sm.object_id = o.object_id
-        JOIN sys.schemas s ON o.schema_id = s.schema_id
-        WHERE o.type = UPPER(?)
-           OR o.type_desc = UPPER(?)
-        ORDER BY s.name, o.name
+        select concat(s.name, '.', o.name) as name
+        from sys.sql_modules sm
+            join sys.objects o on sm.object_id = o.object_id
+            join sys.schemas s on o.schema_id = s.schema_id
+        where o.type = UPPER(?)
+           or o.type_desc = UPPER(?)
+        order by o.type, s.name        
     """
     object_type_normalized = object_type.strip()
-    return execute_query(database, sql, (object_type_normalized, object_type_normalized))
+    module_names = execute_query(database, sql, (object_type_normalized, object_type_normalized))
+    names = yaml.safe_load(module_names) or []
+    names_cleared = [item["name"] for item in names]    
+    return yaml.dump(names_cleared, allow_unicode=True)
 
 
 def execute_read_query(database: str, query: str) -> str:
