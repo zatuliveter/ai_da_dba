@@ -112,8 +112,10 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
                 then ct.Name + ct.Suffix 
                 else quotename(ct.SchemaName) + '.' + quotename(ct.Name) + ct.Suffix 
             end 
-            + ct.Collation as [col]
-        from sys.columns c	
+            + ct.Collation
+			+ isnull(' identity(' + cast(ic.seed_value as varchar(64)) + ',' + cast(ic.increment_value as varchar(64)) + ')', '') as [col]
+        from sys.columns c
+			left join sys.identity_columns ic on ic.object_id = c.object_id and ic.column_id = c.column_id
             join sys.databases db on db.name = db_name()
             outer apply (
                 select schema_name(schema_id) as SchemaName
