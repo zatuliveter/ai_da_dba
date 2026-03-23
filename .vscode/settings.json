@@ -4,5 +4,9 @@
         "**/.pytest_cache": true,
         "**/.vs": true,
         "**/.venv": true
-    }
+    },
+    "cSpell.words": [
+        "FILEGROUP",
+        "quotename"
+    ]
 }
