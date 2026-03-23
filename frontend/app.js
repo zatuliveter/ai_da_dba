@@ -172,6 +172,32 @@ function handleMessage(data) {
             renderHistory(data.messages || []);
             setInputEnabled(true);
             break;
+        case "chat_tokens": {
+            const cid = data.chat_id;
+            const chat_tokens = data.chat_tokens;
+            const sent_tokens = data.sent_tokens;
+            if (cid == null || total == null || !currentDatabase) break;
+            const li = chatListEl.querySelector(`[data-chat-id="${cid}"]`);
+            if (!li) {
+                loadChats(currentDatabase);
+                break;
+            }
+            const metaLeft = li.querySelector(".chat-item-meta-left");
+            if (!metaLeft) break;
+            
+            if (!tokensSpan) {
+                sep = document.createElement("span");
+                sep.className = "chat-item-meta-sep text-xs theme-chat-date opacity-70";
+                sep.textContent = "·";
+                tokensSpan = document.createElement("span");
+                tokensSpan.className = "chat-item-tokens text-xs theme-chat-date opacity-90 whitespace-nowrap";
+                tokensSpan.title = "Tokens (cumulative)";
+                metaLeft.appendChild(sep);
+                metaLeft.appendChild(tokensSpan);
+            }
+            tokensSpan.textContent = chat_tokens + " / " + sent_tokens;
+            break;
+        }
         case "chat_created":
             if (data.chat) {
                 addChatToList(data.chat, true);
@@ -731,12 +757,29 @@ function addChatToList(chat, insertAtTop = false) {
     row1.appendChild(starBtn);
     row1.appendChild(titleSpan);
 
+    const metaLeft = document.createElement("span");
+    metaLeft.className = "chat-item-meta-left flex min-w-0 flex-1 items-center gap-1 truncate";
+
     const dateTime = chat.created_at
         ? new Date(chat.created_at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })
         : "";
     const dateSpan = document.createElement("span");
     dateSpan.className = "chat-item-date text-xs truncate theme-chat-date";
     dateSpan.textContent = dateTime;
+    metaLeft.appendChild(dateSpan);
+
+    const tok = Number(chat.total_tokens) || 0;
+    if (tok > 0) {
+        const sep = document.createElement("span");
+        sep.className = "chat-item-meta-sep text-xs theme-chat-date opacity-70";
+        sep.textContent = "·";
+        const tokensSpan = document.createElement("span");
+        tokensSpan.className = "chat-item-tokens text-xs theme-chat-date opacity-90 whitespace-nowrap";
+        tokensSpan.textContent = new Intl.NumberFormat().format(tok);
+        tokensSpan.title = "Tokens (cumulative)";
+        metaLeft.appendChild(sep);
+        metaLeft.appendChild(tokensSpan);
+    }
 
     const editBtn = document.createElement("button");
     editBtn.type = "button";
@@ -786,7 +829,7 @@ function addChatToList(chat, insertAtTop = false) {
 
     const row2 = document.createElement("div");
     row2.className = "chat-item-meta";
-    row2.appendChild(dateSpan);
+    row2.appendChild(metaLeft);
     row2.appendChild(editBtn);
     row2.appendChild(deleteBtn);
 

@@ -132,6 +132,17 @@ def init_db() -> None:
             conn.execute("ALTER TABLE chat_messages ADD COLUMN tool_calls_json TEXT")
             conn.commit()
 
+        cur = conn.execute("PRAGMA table_info(chats)")
+        chat_columns = [row[1] for row in cur.fetchall()]
+        if "chat_tokens" not in chat_columns:
+            conn.execute(
+                "ALTER TABLE chats ADD COLUMN chat_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.execute(
+                "ALTER TABLE chats ADD COLUMN sent_tokens INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.commit()
+
     finally:
         conn.close()
 
@@ -185,7 +196,8 @@ def list_chats(database_name: str) -> list[dict]:
     """Return list of chats for the given database, starred first then newest first."""
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, title, created_at, starred FROM chats WHERE database_name = ? "
+            "SELECT id, title, created_at, starred, chat_tokens, sent_tokens "
+            "FROM chats WHERE database_name = ? "
             "ORDER BY created_at DESC",
             (database_name,),
         ).fetchall()
@@ -195,13 +207,15 @@ def list_chats(database_name: str) -> list[dict]:
                 "title": r["title"],
                 "created_at": r["created_at"],
                 "starred": bool(r["starred"]),
+                "chat_tokens": int(r["chat_tokens"] or 0),
+                "sent_tokens": int(r["sent_tokens"] or 0),
             }
             for r in rows
         ]
 
 
 def create_chat(database_name: str, title: str = "Новый чат") -> dict:
-    """Create a new chat for the database. Returns {id, title, created_at, starred}."""
+    """Create a new chat for the database. Returns {id, title, created_at, starred, chat_tokens, sent_tokens}."""
     database_id = get_or_create_database_id(database_name)
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
@@ -211,7 +225,34 @@ def create_chat(database_name: str, title: str = "Новый чат") -> dict:
         )
         conn.commit()
         chat_id = cur.lastrowid
-    return {"id": chat_id, "title": title or "Новый чат", "created_at": now, "starred": False}
+    return {
+        "id": chat_id,
+        "title": title or "Новый чат",
+        "created_at": now,
+        "starred": False,
+        "chat_tokens": 0,
+        "sent_tokens": 0,
+    }
+
+
+def add_chat_tokens(chat_id: int, delta: int) -> int:
+    """Add delta to chats.chat_tokens; return new cumulative total. No-op update if delta <= 0."""
+    with _get_conn() as conn:
+        if delta > 0:
+            conn.execute("""
+                UPDATE chats 
+                SET chat_tokens = ? 
+                  , sent_tokens = sent_tokens + ?
+                WHERE id = ?
+                """,
+                (delta, delta, chat_id),
+            )
+        row = conn.execute(
+            "SELECT sent_tokens FROM chats WHERE id = ?",
+            (chat_id,),
+        ).fetchone()
+        conn.commit()
+        return int(row["sent_tokens"] or 0) if row else 0
 
 
 def get_chat_messages(chat_id: int) -> list[ChatMessage]:

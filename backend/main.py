@@ -14,6 +14,7 @@ from db import list_databases
 from prompts import DEFAULT_ROLE, get_system_prompt
 from store import (
     ChatMessage,
+    add_chat_tokens,
     get_db_description,
     set_db_description,
     list_chats,
@@ -103,7 +104,7 @@ def api_list_chats(name: str):
 
 @app.post("/api/databases/{name}/chats")
 def api_create_chat(name: str, body: dict = Body(default=None)):
-    """Create a new chat for the database. Body optional: {"title": "..."}. Returns {id, title, created_at, starred}."""
+    """Create a new chat for the database. Body optional: {"title": "..."}. Returns {id, title, created_at, starred, chat_tokens, sent_tokens}."""
     try:
         title = (body or {}).get("title", "Новый чат") or "Новый чат"
         chat = create_chat(name, title)
@@ -269,6 +270,16 @@ def _extract_cached_tokens(usage_data: dict) -> int | None:
     for value in candidates:
         if isinstance(value, int):
             return value
+    return None
+
+
+def _extract_total_tokens(usage_data: dict) -> int | None:
+    """Return completion total_tokens from usage dict if present and non-negative."""
+    if not isinstance(usage_data, dict):
+        return None
+    v = usage_data.get("total_tokens")
+    if isinstance(v, int) and v >= 0:
+        return v
     return None
 
 
@@ -461,24 +472,28 @@ async def _agent_loop(
         collected_msg = ""
         tools_acc = {}
         next_auto_index = 0  # when API omits index in chunk, assign 0, 1, 2...
+        last_usage_data: dict | None = None
 
         # process chunks as they arrive
         for chunk in response:
             usage = getattr(chunk, "usage", None)
             if usage:
                 usage_data = usage.model_dump() if hasattr(usage, "model_dump") else usage
-                if isinstance(usage_data, dict):                    
+                if isinstance(usage_data, dict):
+                    last_usage_data = usage_data
                     log.info("LLM usage metadata: %s", usage_data)
                     cached_tokens = _extract_cached_tokens(usage_data)
                     if cached_tokens is None:
                         log.info("Gemini cache: MISS (cached tokens=0)")
                     else:
-                        log.info("Gemini cached tokens=%d)", cached_tokens)
+                        log.info("Gemini cached tokens=%d", cached_tokens)
                 else:
                     log.info("WARN: LLM usage metadata (non-dict): %s", usage_data)
-                            
 
-            delta = chunk.choices[0].delta
+            choices = getattr(chunk, "choices", None) or []
+            if not choices:
+                continue
+            delta = choices[0].delta
 
             # stream normal text directly to frontend
             if delta.content:
@@ -507,6 +522,16 @@ async def _agent_loop(
                         tools_acc[idx]["function"]["arguments"] += tc.function.arguments
                     if tc.id:
                         tools_acc[idx]["id"] += tc.id
+
+        round_tokens = _extract_total_tokens(last_usage_data) if last_usage_data else None
+        if round_tokens is not None:
+            sent_tokens = add_chat_tokens(chat_id, round_tokens)
+            await ws.send_text(json.dumps({
+                "type": "chat_tokens",
+                "chat_id": chat_id,
+                "chat_tokens": round_tokens,
+                "sent_tokens": sent_tokens,
+            }))
 
         # if tools were called, execute them and continue the loop
         if tools_acc:

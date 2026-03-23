@@ -220,7 +220,7 @@ aside#sidebar,
     color: var(--text-muted) !important;
 }
 
-/* Chat item: two rows — row1: star + title, row2: date + edit + delete */
+/* Chat item: two rows — row1: star + title, row2: date + tokens + edit + delete */
 #sidebar #chat-list .chat-item {
     display: flex;
     flex-direction: column;
@@ -244,11 +244,22 @@ aside#sidebar,
     min-width: 0;
     padding-left: 1.25rem;
 }
-#sidebar #chat-list .chat-item-date {
+#sidebar #chat-list .chat-item-meta-left {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex: 1;
+    min-width: 0;
+}
+#sidebar #chat-list .chat-item-meta-left .chat-item-date {
     flex: 1;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+#sidebar #chat-list .chat-item-tokens {
+    color: var(--text-muted) !important;
+    flex-shrink: 0;
 }
 #sidebar #chat-list .chat-star-btn {
     background: none;
