@@ -6,7 +6,26 @@
         "**/.venv": true
     },
     "cSpell.words": [
+        "arithabort",
+        "compr",
+        "datediff",
+        "datetimeoffset",
         "FILEGROUP",
-        "quotename"
+        "fileproperty",
+        "fulltext",
+        "hierarchyid",
+        "nonclustered",
+        "ntext",
+        "quotename",
+        "rcsi",
+        "roundabort",
+        "rowversion",
+        "SHOWPLAN",
+        "smalldatetime",
+        "smallmoney",
+        "sysname",
+        "sysutcdatetime",
+        "tinyint",
+        "varbinary"
     ]
 }

@@ -439,7 +439,7 @@ def _parse_execution_plan(xml_plan: str) -> str:
                 for cg in mi.findall("sp:ColumnGroup[@Usage='EQUALITY']", ns)
                 for c in cg.findall("sp:Column", ns)
             ]
-            ineq_cols = [
+            inequality_columns = [
                 c.get("Name", "").strip("[]")
                 for cg in mi.findall("sp:ColumnGroup[@Usage='INEQUALITY']", ns)
                 for c in cg.findall("sp:Column", ns)
@@ -453,7 +453,7 @@ def _parse_execution_plan(xml_plan: str) -> str:
                 "table": f"{schema}.{table}",
                 "impact": impact,
                 "equality_columns": eq_cols or None,
-                "inequality_columns": ineq_cols or None,
+                "inequality_columns": inequality_columns or None,
                 "include_columns": incl_cols or None,
             })
 
