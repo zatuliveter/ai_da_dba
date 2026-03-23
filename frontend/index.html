@@ -86,35 +86,37 @@
 
             <!-- Input area (only under chat) -->
             <footer class="border-t px-4 pt-2 pb-3 shrink-0 theme-header">
-                <div class="max-w-4xl mx-auto flex flex-col gap-2">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <input type="file" id="file-input" accept=".txt,.sql,.xml,.json,.md,.csv,text/*" multiple class="hidden">
-                        <select id="role-select"
-                            class="footer-control-compact rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 theme-input"
-                            title="AI role">
-                            <option value="assistant" selected>Assistant</option>
-                            <option value="dba">DBA</option>
-                        </select>
-                        <label for="file-input" id="attach-btn" class="footer-control-compact attach-btn-label rounded-lg px-2.5 py-1.5 text-sm theme-input flex items-center justify-center cursor-pointer" title="Attach files" role="button">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.414a4 4 0 00-5.656-5.656l-6.415 6.414a6 6 0 108.486 8.486L20.5 13"/></svg>
-                        </label>
-                        <div id="attachments-list-wrap" class="attachments-list-wrap flex flex-wrap gap-2 items-center min-h-0"></div>
-                    </div>
-                    <div class="flex gap-2 items-end">
+                <div class="max-w-4xl mx-auto flex flex-col gap-3 sm:flex-row sm:items-end">
+                    <!-- Column 1: role + attachments row, then message input -->
+                    <div class="flex-1 flex flex-col gap-2 min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <input type="file" id="file-input" accept=".txt,.sql,.xml,.json,.md,.csv,text/*" multiple class="hidden">
+                            <select id="role-select"
+                                class="footer-control-compact rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 theme-input"
+                                title="AI role">
+                                <option value="assistant" selected>Assistant</option>
+                                <option value="dba">DBA</option>
+                            </select>
+                            <label for="file-input" id="attach-btn" class="footer-control-compact attach-btn-label rounded-lg px-2.5 py-1.5 text-sm theme-input flex items-center justify-center cursor-pointer" title="Attach files" role="button">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.414a4 4 0 00-5.656-5.656l-6.415 6.414a6 6 0 108.486 8.486L20.5 13"/></svg>
+                            </label>
+                            <div id="attachments-list-wrap" class="attachments-list-wrap flex flex-wrap gap-2 items-center min-h-0"></div>
+                        </div>
                         <textarea id="user-input"
-                            class="flex-1 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 theme-input"
+                            class="w-full rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 theme-input"
                             rows="3"
                             placeholder="Paste a SQL query or ask a question about your database..."></textarea>
-                        <div class="flex flex-col gap-1 shrink-0 justify-end items-end min-w-[10rem]">
-                            <div id="chat-token-stats"
-                                class="text-xs theme-chat-date whitespace-pre-line text-right leading-snug max-w-[12rem]">
-                            </div>
-                            <button id="send-btn"
-                                class="rounded-xl px-5 py-2.5 text-sm font-medium transition-colors theme-send-btn shrink-0"
-                                disabled>
-                                Send
-                            </button>
+                    </div>
+                    <!-- Column 2: chat stats + Send -->
+                    <div class="flex flex-row sm:flex-col gap-2 shrink-0 items-center justify-between sm:items-end sm:justify-end w-full sm:min-w-[10rem] sm:w-auto">
+                        <div id="chat-token-stats"
+                            class="text-xs theme-chat-date whitespace-pre-line text-right leading-snug max-w-[12rem]">
                         </div>
+                        <button id="send-btn"
+                            class="rounded-xl px-5 py-2.5 text-sm font-medium transition-colors theme-send-btn shrink-0"
+                            disabled>
+                            Send
+                        </button>
                     </div>
                 </div>
             </footer>
