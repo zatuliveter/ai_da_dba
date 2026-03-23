@@ -90,6 +90,71 @@ function highlightCodeBlocks(container) {
     });
 }
 
+async function copyTextToClipboard(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (e) {
+        /* fall through */
+    }
+    try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+        return ok;
+    } catch (e) {
+        return false;
+    }
+}
+
+function attachCodeBlockCopyButtons(container) {
+    container.querySelectorAll("pre").forEach((pre) => {
+        const code = pre.querySelector("code");
+        if (!code) return;
+
+        let wrap = pre.parentElement;
+        if (wrap && wrap.classList.contains("code-block-wrap")) {
+            if (wrap.querySelector(".code-copy-btn")) return;
+        } else {
+            wrap = document.createElement("div");
+            wrap.className = "code-block-wrap";
+            pre.parentNode.insertBefore(wrap, pre);
+            wrap.appendChild(pre);
+        }
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "code-copy-btn";
+        btn.textContent = "Copy";
+        btn.title = "Copy to clipboard";
+        btn.addEventListener("click", async () => {
+            const text = code.textContent || "";
+            const ok = await copyTextToClipboard(text);
+            const label = ok ? "Copied" : "Failed";
+            btn.textContent = label;
+            btn.title = ok ? "Copied" : "Copy failed";
+            setTimeout(() => {
+                btn.textContent = "Copy";
+                btn.title = "Copy to clipboard";
+            }, 2000);
+        });
+        wrap.insertBefore(btn, pre);
+    });
+}
+
+function finalizeAssistantHtml(container) {
+    highlightCodeBlocks(container);
+    attachCodeBlockCopyButtons(container);
+}
+
 // ---------------------------------------------------------------------------
 // WebSocket connection
 // ---------------------------------------------------------------------------
@@ -273,7 +338,7 @@ function renderHistory(messages) {
                 const div = document.createElement("div");
                 div.className = "msg-assistant";
                 div.innerHTML = renderMarkdown(text);
-                highlightCodeBlocks(div);
+                finalizeAssistantHtml(div);
                 chatInner.appendChild(div);
             }
         } else if (msg.role === "tool_call") {
@@ -477,7 +542,7 @@ function handleStreamChunk(content) {
     }
     currentStreamContent += content;
     currentStreamDiv.innerHTML = renderMarkdown(currentStreamContent);
-    highlightCodeBlocks(currentStreamDiv);
+    finalizeAssistantHtml(currentStreamDiv);
     if (isUserNearBottom()) scrollToBottom();
 }
 // ---------------------------------------------------------------------------
