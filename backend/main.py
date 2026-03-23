@@ -592,6 +592,8 @@ async def _agent_loop(
                 }))
 
                 result = dispatch_tool(t_name, t_args, database)
+                if result is None or result == "":
+                    result = "(tool returned no result)"
                 if len(result) > MAX_TOOL_RESULT_LENGTH:
                     result = result[:MAX_TOOL_RESULT_LENGTH] + "\n\n[... result truncated due to size ...]"
                 await ws.send_text(json.dumps({"type": "tool_result", "result": result}))
