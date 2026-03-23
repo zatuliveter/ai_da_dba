@@ -20,6 +20,7 @@ from store import (
     create_chat,
     get_chat_messages,
     append_chat_messages,
+    get_chat_token_stats,
     set_chat_starred,
     update_chat_title,
     delete_chat,
@@ -27,6 +28,13 @@ from store import (
     init_db,
 )
 from tools import TOOL_DEFINITIONS, dispatch_tool
+
+_EMPTY_TOKEN_STATS: dict = {
+    "last_prompt_tokens": 0,
+    "total_prompt_tokens": 0,
+    "total_cached_tokens": 0,
+    "total_completion_tokens": 0,
+}
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("agent")
@@ -272,6 +280,41 @@ def _extract_cached_tokens(usage_data: dict) -> int | None:
     return None
 
 
+def _extract_prompt_tokens(usage_data: dict | None) -> int | None:
+    if not isinstance(usage_data, dict):
+        return None
+    um = usage_data.get("usageMetadata") or {}
+    candidates = [
+        usage_data.get("prompt_tokens"),
+        usage_data.get("input_tokens"),
+        um.get("promptTokenCount"),
+    ]
+    for value in candidates:
+        if isinstance(value, int):
+            return value
+    return None
+
+
+def _extract_completion_tokens(usage_data: dict | None) -> int | None:
+    if not isinstance(usage_data, dict):
+        return None
+    um = usage_data.get("usageMetadata") or {}
+    candidates = [
+        usage_data.get("completion_tokens"),
+        usage_data.get("output_tokens"),
+        um.get("candidatesTokenCount"),
+    ]
+    for value in candidates:
+        if isinstance(value, int):
+            return value
+    return None
+
+
+async def _send_chat_token_update(ws: WebSocket, chat_id: int) -> None:
+    stats = get_chat_token_stats(chat_id)
+    await ws.send_text(json.dumps({"type": "chat_tokens", "chat_id": chat_id, **stats}))
+
+
 def _chat_messages_to_api_messages(stored: list[ChatMessage]) -> list[dict]:
     """Map persisted chat rows to OpenAI-compatible message dicts (user, assistant, tool)."""
     api_messages: list[dict] = []
@@ -331,6 +374,7 @@ async def ws_chat(ws: WebSocket):
                         }
                         for m in history
                     ],
+                    "token_stats": get_chat_token_stats(chat_id),
                 }))
                 continue
             
@@ -341,7 +385,11 @@ async def ws_chat(ws: WebSocket):
                     continue
                 database = str(db_name)
                 chat_id = None
-                await ws.send_text(json.dumps({"type": "history_loaded", "messages": []}))
+                await ws.send_text(json.dumps({
+                    "type": "history_loaded",
+                    "messages": [],
+                    "token_stats": _EMPTY_TOKEN_STATS,
+                }))
                 continue
             
             if payload.get("type") == "create_chat":
@@ -355,7 +403,11 @@ async def ws_chat(ws: WebSocket):
                     "type": "chat_created",
                     "chat": chat,
                 }))
-                await ws.send_text(json.dumps({"type": "history_loaded", "messages": []}))
+                await ws.send_text(json.dumps({
+                    "type": "history_loaded",
+                    "messages": [],
+                    "token_stats": get_chat_token_stats(chat_id),
+                }))
                 continue
 
             if payload.get("type") == "message":
@@ -461,23 +513,26 @@ async def _agent_loop(
         collected_msg = ""
         tools_acc = {}
         next_auto_index = 0  # when API omits index in chunk, assign 0, 1, 2...
+        last_usage_data: dict | None = None
 
         # process chunks as they arrive
         for chunk in response:
             usage = getattr(chunk, "usage", None)
             if usage:
                 usage_data = usage.model_dump() if hasattr(usage, "model_dump") else usage
-                if isinstance(usage_data, dict):                    
+                if isinstance(usage_data, dict):
+                    last_usage_data = usage_data
                     log.info("LLM usage metadata: %s", usage_data)
                     cached_tokens = _extract_cached_tokens(usage_data)
                     if cached_tokens is None:
                         log.info("Gemini cache: MISS (cached tokens=0)")
                     else:
-                        log.info("Gemini cached tokens=%d)", cached_tokens)
+                        log.info("Gemini cached tokens=%d", cached_tokens)
                 else:
                     log.info("WARN: LLM usage metadata (non-dict): %s", usage_data)
-                            
 
+            if not chunk.choices:
+                continue
             delta = chunk.choices[0].delta
 
             # stream normal text directly to frontend
@@ -508,6 +563,10 @@ async def _agent_loop(
                     if tc.id:
                         tools_acc[idx]["id"] += tc.id
 
+        pt = _extract_prompt_tokens(last_usage_data)
+        cached_tok = _extract_cached_tokens(last_usage_data) if isinstance(last_usage_data, dict) else None
+        comp = _extract_completion_tokens(last_usage_data)
+
         # if tools were called, execute them and continue the loop
         if tools_acc:
             # Ensure tool_calls are in index order (0, 1, 2...) for Gemini API
@@ -517,6 +576,9 @@ async def _agent_loop(
                     role="assistant",
                     content=collected_msg or "",
                     tool_calls=sorted_calls,
+                    prompt_tokens=pt,
+                    cached_tokens=cached_tok,
+                    completion_tokens=comp,
                 ),
             ]
             for tc in sorted_calls:
@@ -542,10 +604,20 @@ async def _agent_loop(
                     )
                 )
             append_chat_messages(chat_id, to_append)
+            await _send_chat_token_update(ws, chat_id)
             continue
 
         # no tools called, meaning this is the final answer
-        append_chat_messages(chat_id, [ChatMessage(role=agent_role, content=collected_msg)])
+        append_chat_messages(chat_id, [
+            ChatMessage(
+                role=agent_role,
+                content=collected_msg,
+                prompt_tokens=pt,
+                cached_tokens=cached_tok,
+                completion_tokens=comp,
+            ),
+        ])
+        await _send_chat_token_update(ws, chat_id)
         await ws.send_text(json.dumps({"type": "stream_end"}))
         return
 

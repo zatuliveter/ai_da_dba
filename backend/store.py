@@ -20,6 +20,9 @@ class ChatMessage:
     tool_result: str | None = None
     tool_call_id: str | None = None
     tool_calls: list | None = None
+    prompt_tokens: int | None = None
+    cached_tokens: int | None = None
+    completion_tokens: int | None = None
 
 
 _SCHEMA = """
@@ -132,6 +135,19 @@ def init_db() -> None:
             conn.execute("ALTER TABLE chat_messages ADD COLUMN tool_calls_json TEXT")
             conn.commit()
 
+        # Migration: LLM usage per assistant turn
+        cur = conn.execute("PRAGMA table_info(chat_messages)")
+        cm_columns = [row[1] for row in cur.fetchall()]
+        if "prompt_tokens" not in cm_columns:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN prompt_tokens INTEGER")
+            conn.commit()
+        if "cached_tokens" not in cm_columns:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN cached_tokens INTEGER")
+            conn.commit()
+        if "completion_tokens" not in cm_columns:
+            conn.execute("ALTER TABLE chat_messages ADD COLUMN completion_tokens INTEGER")
+            conn.commit()
+
     finally:
         conn.close()
 
@@ -218,7 +234,9 @@ def get_chat_messages(chat_id: int) -> list[ChatMessage]:
     """Load all messages for a chat as list of ChatMessage."""
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT role, content, tool_result, tool_call_id, tool_calls_json FROM chat_messages WHERE chat_id = ? ORDER BY id ASC",
+            "SELECT role, content, tool_result, tool_call_id, tool_calls_json, "
+            "prompt_tokens, cached_tokens, completion_tokens "
+            "FROM chat_messages WHERE chat_id = ? ORDER BY id ASC",
             (chat_id,),
         ).fetchall()
         out = []
@@ -236,6 +254,9 @@ def get_chat_messages(chat_id: int) -> list[ChatMessage]:
                     tool_result=r["tool_result"] if r["tool_result"] else None,
                     tool_call_id=r["tool_call_id"] if r["tool_call_id"] else None,
                     tool_calls=tool_calls,
+                    prompt_tokens=r["prompt_tokens"],
+                    cached_tokens=r["cached_tokens"],
+                    completion_tokens=r["completion_tokens"],
                 )
             )
         return out
@@ -261,11 +282,47 @@ def append_chat_messages(chat_id: int, messages: list[ChatMessage]) -> None:
                     tool_calls_json = json.dumps(msg.tool_calls)
                 except (TypeError, ValueError):
                     pass
+            pt = getattr(msg, "prompt_tokens", None)
+            ct_cached = getattr(msg, "cached_tokens", None)
+            ct_comp = getattr(msg, "completion_tokens", None)
             conn.execute(
-                "INSERT INTO chat_messages (chat_id, role, content, created_at, tool_result, tool_call_id, tool_calls_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (chat_id, msg.role, content, now, tool_result, tool_call_id, tool_calls_json),
+                "INSERT INTO chat_messages (chat_id, role, content, created_at, tool_result, tool_call_id, tool_calls_json, "
+                "prompt_tokens, cached_tokens, completion_tokens) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    chat_id,
+                    msg.role,
+                    content,
+                    now,
+                    tool_result,
+                    tool_call_id,
+                    tool_calls_json,
+                    pt,
+                    ct_cached,
+                    ct_comp,
+                ),
             )
         conn.commit()
+
+
+def get_chat_token_stats(chat_id: int) -> dict:
+    """Aggregates for footer UI: last prompt for latest LLM turn and sums over the chat."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT "
+            "(SELECT prompt_tokens FROM chat_messages WHERE chat_id = ? AND prompt_tokens IS NOT NULL "
+            "ORDER BY id DESC LIMIT 1) AS last_prompt_tokens, "
+            "COALESCE((SELECT SUM(prompt_tokens) FROM chat_messages WHERE chat_id = ?), 0) AS total_prompt_tokens, "
+            "COALESCE((SELECT SUM(cached_tokens) FROM chat_messages WHERE chat_id = ?), 0) AS total_cached_tokens, "
+            "COALESCE((SELECT SUM(completion_tokens) FROM chat_messages WHERE chat_id = ?), 0) AS total_completion_tokens",
+            (chat_id, chat_id, chat_id, chat_id),
+        ).fetchone()
+    last_p = row["last_prompt_tokens"]
+    return {
+        "last_prompt_tokens": int(last_p) if last_p is not None else 0,
+        "total_prompt_tokens": int(row["total_prompt_tokens"] or 0),
+        "total_cached_tokens": int(row["total_cached_tokens"] or 0),
+        "total_completion_tokens": int(row["total_completion_tokens"] or 0),
+    }
 
 
 def update_chat_title(chat_id: int, title: str) -> None:

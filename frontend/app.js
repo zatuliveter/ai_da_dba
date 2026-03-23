@@ -13,6 +13,14 @@ const roleSelect = document.getElementById("role-select");
 const fileInput = document.getElementById("file-input");
 const attachBtn = document.getElementById("attach-btn");
 const attachmentsListWrap = document.getElementById("attachments-list-wrap");
+const chatTokenStatsEl = document.getElementById("chat-token-stats");
+
+const EMPTY_TOKEN_STATS = {
+    last_prompt_tokens: 0,
+    total_prompt_tokens: 0,
+    total_cached_tokens: 0,
+    total_completion_tokens: 0,
+};
 
 let ws = null;
 let currentDatabase = null;
@@ -126,6 +134,17 @@ function connectWS() {
     };
 }
 
+function updateChatTokenFooter(stats) {
+    if (!chatTokenStatsEl) return;
+    const s = { ...EMPTY_TOKEN_STATS, ...(stats || {}) };
+    const lp = Number(s.last_prompt_tokens) || 0;
+    const tp = Number(s.total_prompt_tokens) || 0;
+    const tc = Number(s.total_cached_tokens) || 0;
+    const tco = Number(s.total_completion_tokens) || 0;
+    chatTokenStatsEl.textContent =
+        `Chat size: ${lp}\nTotal prompt: ${tp}\nCached: ${tc}\nCompletion: ${tco}`;
+}
+
 function setStatus(state) {
     if (state === "connected") {
         statusDot.className = "w-2.5 h-2.5 rounded-full bg-green-500";
@@ -170,7 +189,18 @@ function handleMessage(data) {
             break;
         case "history_loaded":
             renderHistory(data.messages || []);
+            updateChatTokenFooter(data.token_stats);
             setInputEnabled(true);
+            break;
+        case "chat_tokens":
+            if (data.chat_id != null && data.chat_id === currentChatId) {
+                updateChatTokenFooter({
+                    last_prompt_tokens: data.last_prompt_tokens,
+                    total_prompt_tokens: data.total_prompt_tokens,
+                    total_cached_tokens: data.total_cached_tokens,
+                    total_completion_tokens: data.total_completion_tokens,
+                });
+            }
             break;
         case "chat_created":
             if (data.chat) {
