@@ -384,12 +384,18 @@ header .w-px {
 .msg-assistant pre {
     margin: 0.5em 0;
     border-radius: 0.5rem;
-    overflow-x: auto;
+    min-width: 0;
+    max-width: 100%;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .msg-assistant .code-block-wrap {
     position: relative;
     margin: 0.5em 0;
+    min-width: 0;
+    max-width: 100%;
 }
 
 .msg-assistant .code-block-wrap pre {
@@ -430,6 +436,9 @@ header .w-px {
     border-radius: 0.5rem;
     font-size: 0.82rem;
     line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    word-break: break-word;
 }
 
 .msg-assistant .code-block-wrap pre code {
@@ -566,8 +575,10 @@ header .w-px {
     line-height: 1.4;
     background: var(--code-block-bg);
     border-radius: 0.375rem;
-    overflow-x: auto;
+    min-width: 0;
+    max-width: 100%;
     white-space: pre-wrap;
+    overflow-wrap: break-word;
     word-break: break-word;
 }
 
