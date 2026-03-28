@@ -3,13 +3,15 @@ SQLite store: database descriptions, chats, and chat messages.
 DB file: backend/data/app.db (created on first use).
 """
 import json
+import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-DB_DIR = Path(__file__).resolve().parent / "data"
-DB_PATH = DB_DIR / "app.db"
+from backend.config import DATA_DIR
+
+DB_PATH = DATA_DIR / "app.db"
 
 
 @dataclass(frozen=True)
@@ -57,12 +59,8 @@ CREATE INDEX IF NOT EXISTS idx_chat_messages_chat_id ON chat_messages(chat_id);
 MAX_MESSAGE_CONTENT_LENGTH = 200_000
 
 
-def _ensure_dir():
-    DB_DIR.mkdir(parents=True, exist_ok=True)
-
 
 def _get_conn() -> sqlite3.Connection:
-    _ensure_dir()
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn

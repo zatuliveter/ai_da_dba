@@ -1,4 +1,4 @@
-from db import execute_query
+from backend.db import execute_query
 
 
 def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:

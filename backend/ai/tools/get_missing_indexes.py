@@ -1,4 +1,4 @@
-from db import execute_query
+from backend.db import execute_query
 
 
 def get_missing_indexes(database: str, table_name: str | None = None, schema: str = "dbo") -> str:

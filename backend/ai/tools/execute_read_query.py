@@ -2,7 +2,7 @@ import re
 
 import yaml
 
-from db import MAX_ROWS, execute_query
+from backend.db import MAX_ROWS, execute_query
 
 
 def execute_read_query(database: str, query: str) -> str:

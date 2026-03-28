@@ -10,6 +10,7 @@
         "compr",
         "datediff",
         "datetimeoffset",
+        "dotenv",
         "FILEGROUP",
         "fileproperty",
         "fulltext",

@@ -1,6 +1,6 @@
 import yaml
 
-from db import execute_query, execute_scalar
+from backend.db import execute_query, execute_scalar
 
 from ._columns_sql import COLUMNS_SQL
 

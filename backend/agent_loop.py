@@ -3,10 +3,10 @@ import logging
 
 from fastapi import WebSocket
 
-from config import llm_client, LLM_MODEL
-from prompts import get_system_prompt
-from store import ChatMessage, append_chat_messages, get_chat_messages, get_chat_token_stats, get_db_description
-from tools import TOOL_DEFINITIONS, dispatch_tool
+from backend.config import llm_client, LLM_MODEL
+from backend.ai.prompts import get_system_prompt
+from backend.ai.store import ChatMessage, append_chat_messages, get_chat_messages, get_chat_token_stats, get_db_description
+from backend.ai.tools import TOOL_DEFINITIONS, dispatch_tool
 
 log = logging.getLogger("agent")
 

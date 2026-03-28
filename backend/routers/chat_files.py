@@ -1,15 +1,15 @@
 import os
 import re
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
-from dependencies import require_chat_belongs_to_db
+from backend.config import DATA_DIR
+from backend.dependencies import require_chat_belongs_to_db
 
 router = APIRouter(prefix="/api/databases", tags=["chat_files"])
 
-FILES_DIR = Path(__file__).resolve().parent.parent / "data" / "files"
+FILES_DIR = DATA_DIR / "files"
 MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
 MAX_FILES_PER_MESSAGE = 10
 ALLOWED_EXTENSIONS = {".txt", ".sql", ".xml", ".json", ".md", ".csv", ".xdl", ".sqlplan"}

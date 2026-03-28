@@ -1,6 +1,6 @@
 from fastapi import HTTPException
 
-from store import get_chat_database_name
+from backend.ai.store import get_chat_database_name
 
 
 def require_chat_belongs_to_db(name: str, chat_id: int) -> str:

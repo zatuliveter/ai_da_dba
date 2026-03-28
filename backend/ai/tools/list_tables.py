@@ -1,4 +1,4 @@
-from db import execute_query
+from backend.db import execute_query
 
 
 def list_tables(database: str) -> str:

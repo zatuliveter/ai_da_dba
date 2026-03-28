@@ -1,6 +1,6 @@
 import yaml
 
-from db import execute_query
+from backend.db import execute_query
 
 
 def list_sql_modules(database: str, object_type: str) -> str:

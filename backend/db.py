@@ -1,6 +1,6 @@
 import pyodbc
 import yaml
-from config import SQL_SERVER
+from backend.config import SQL_SERVER
 
 MAX_ROWS = 1000
 QUERY_TIMEOUT = 30

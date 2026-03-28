@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 
 import yaml
 
-from db import get_connection
+from backend.db import get_connection
 
 
 def _parse_execution_plan(xml_plan: str) -> str:

@@ -3,13 +3,13 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from config import validate_config
-from routers.chat_files import router as chat_files_router
-from routers.chats import router as chats_router
-from routers.databases import router as databases_router
-from static_files import mount_frontend
-from store import init_db
-from websocket_chat import router as websocket_router
+from backend.config import validate_config
+from backend.routers.chat_files import router as chat_files_router
+from backend.routers.chats import router as chats_router
+from backend.routers.databases import router as databases_router
+from backend.static_files import mount_frontend
+from backend.ai.store import init_db
+from backend.websocket_chat import router as websocket_router
 
 logging.basicConfig(level=logging.INFO)
 
