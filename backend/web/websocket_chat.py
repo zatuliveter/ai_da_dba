@@ -3,9 +3,9 @@ import logging
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
-from backend.agent_loop import EMPTY_TOKEN_STATS, run_agent_loop
+from backend.web.agent_loop import EMPTY_TOKEN_STATS, run_agent_loop
 from backend.ai.prompts import DEFAULT_ROLE
-from backend.routers.chat_files import FILES_DIR, sanitize_filename
+from backend.web.routers.chat_files import FILES_DIR, sanitize_filename
 from backend.ai.store import (
     ChatMessage,
     append_chat_messages,

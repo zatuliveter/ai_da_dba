@@ -10,7 +10,9 @@ API_KEY = os.getenv("API_KEY", "")
 API_URL = (os.getenv("API_URL") or "").strip()
 SQL_SERVER = os.getenv("SQL_SERVER", "localhost")
 LLM_MODEL = os.getenv("LLM_MODEL")
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = ROOT_DIR / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True) # Ensure data directory exists
     
 if API_KEY and API_URL:

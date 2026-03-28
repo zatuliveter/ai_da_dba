@@ -1,9 +1,8 @@
 import os
-from pathlib import Path
-
 from fastapi.staticfiles import StaticFiles
+from backend.config import ROOT_DIR
 
-FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+FRONTEND_DIR = ROOT_DIR / "frontend"
 
 
 class NoCacheStaticFiles(StaticFiles):

@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, Body
 
-from backend.db import list_databases
+from backend.mssql_db import list_databases
 from backend.ai.store import get_db_description, set_db_description
 
 log = logging.getLogger("agent")

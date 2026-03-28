@@ -2,7 +2,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from backend.dependencies import require_chat_belongs_to_db
+from backend.web.common.dependencies import require_chat_belongs_to_db
 from backend.ai.store import (
     create_chat,
     delete_chat,

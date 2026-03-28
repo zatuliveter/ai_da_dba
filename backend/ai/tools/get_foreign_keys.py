@@ -1,4 +1,4 @@
-from backend.db import execute_query
+from backend.mssql_db import execute_query
 
 
 def get_foreign_keys(database: str, table_name: str, schema: str = "dbo") -> str:

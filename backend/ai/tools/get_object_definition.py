@@ -1,4 +1,4 @@
-from backend.db import execute_scalar
+from backend.mssql_db import execute_scalar
 
 
 def get_object_definition(database: str, object_name: str, schema: str = "dbo") -> str:

@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from backend.config import DATA_DIR
-from backend.dependencies import require_chat_belongs_to_db
+from backend.web.common.dependencies import require_chat_belongs_to_db
 
 router = APIRouter(prefix="/api/databases", tags=["chat_files"])
 
