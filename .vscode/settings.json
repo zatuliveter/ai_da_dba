@@ -15,6 +15,7 @@
         "fileproperty",
         "fulltext",
         "hierarchyid",
+        "msdb",
         "nonclustered",
         "ntext",
         "quotename",
@@ -26,6 +27,7 @@
         "smallmoney",
         "sysname",
         "sysutcdatetime",
+        "tempdb",
         "tinyint",
         "varbinary"
     ]

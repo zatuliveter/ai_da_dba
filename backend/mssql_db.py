@@ -1,22 +1,25 @@
-import pyodbc
 import yaml
+from mssql_python import Connection, Cursor, SQL_ATTR_LOGIN_TIMEOUT, connect
+
 from backend.config import SQL_SERVER
 
 MAX_ROWS = 1000
 QUERY_TIMEOUT = 30
 
 _connection_string = (
-    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
     f"SERVER={SQL_SERVER};"
     f"Trusted_Connection=yes;"
 )
 
 
-def get_connection(database: str | None = None) -> pyodbc.Connection:
+def get_connection(database: str | None = None) -> Connection:
     cs = _connection_string
     if database:
         cs += f"DATABASE={database};"
-    return pyodbc.connect(cs, timeout=QUERY_TIMEOUT)
+    return connect(
+        cs,
+        attrs_before={SQL_ATTR_LOGIN_TIMEOUT: QUERY_TIMEOUT},
+    )
 
 
 def list_databases() -> list[str]:
@@ -31,7 +34,7 @@ def list_databases() -> list[str]:
         return [row[0] for row in cursor.fetchall()]
 
 
-def rows_to_yaml(cursor: pyodbc.Cursor, max_rows: int = MAX_ROWS) -> str:
+def rows_to_yaml(cursor: Cursor, max_rows: int = MAX_ROWS) -> str:
     columns = [desc[0] for desc in cursor.description]
     rows = cursor.fetchmany(max_rows + 1)
 
