@@ -29,21 +29,33 @@ TOOL_DEFINITIONS = [
 ]
 
 
-def dispatch_tool(name: str, args: dict, database: str) -> str:
+def dispatch_tool(name: str, args: dict, connection_id: int, database: str) -> str:
     """Route a tool call to the appropriate function."""
     handlers = {
         "get_current_utc_time": lambda a: get_current_utc_time(),
-        "get_database_info": lambda a: get_database_info(database),
-        "list_tables": lambda a: list_tables(database),
-        "get_table_structure": lambda a: get_table_structure(database, a["table_name"], a.get("schema", "dbo")),
-        "get_table_type_definition": lambda a: get_table_type_definition(database, a["table_type_name"], a.get("schema", "dbo")),
-        "get_indexes": lambda a: get_indexes(database, a["table_name"], a.get("schema", "dbo")),
-        "get_execution_plan": lambda a: get_execution_plan(database, a["query"]),
-        "get_missing_indexes": lambda a: get_missing_indexes(database, a.get("table_name"), a.get("schema", "dbo")),
-        "get_foreign_keys": lambda a: get_foreign_keys(database, a["table_name"], a.get("schema", "dbo")),
-        "get_object_definition": lambda a: get_object_definition(database, a["object_name"], a.get("schema", "dbo")),
-        "list_sql_modules": lambda a: list_sql_modules(database, a["object_type"]),
-        "execute_read_query": lambda a: execute_read_query(database, a["query"]),
+        "get_database_info": lambda a: get_database_info(connection_id, database),
+        "list_tables": lambda a: list_tables(connection_id, database),
+        "get_table_structure": lambda a: get_table_structure(
+            connection_id, database, a["table_name"], a.get("schema", "dbo")
+        ),
+        "get_table_type_definition": lambda a: get_table_type_definition(
+            connection_id, database, a["table_type_name"], a.get("schema", "dbo")
+        ),
+        "get_indexes": lambda a: get_indexes(
+            connection_id, database, a["table_name"], a.get("schema", "dbo")
+        ),
+        "get_execution_plan": lambda a: get_execution_plan(connection_id, database, a["query"]),
+        "get_missing_indexes": lambda a: get_missing_indexes(
+            connection_id, database, a.get("table_name"), a.get("schema", "dbo")
+        ),
+        "get_foreign_keys": lambda a: get_foreign_keys(
+            connection_id, database, a["table_name"], a.get("schema", "dbo")
+        ),
+        "get_object_definition": lambda a: get_object_definition(
+            connection_id, database, a["object_name"], a.get("schema", "dbo")
+        ),
+        "list_sql_modules": lambda a: list_sql_modules(connection_id, database, a["object_type"]),
+        "execute_read_query": lambda a: execute_read_query(connection_id, database, a["query"]),
     }
 
     handler = handlers.get(name)

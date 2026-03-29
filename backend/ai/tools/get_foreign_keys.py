@@ -1,7 +1,7 @@
 from backend.mssql_db import execute_query
 
 
-def get_foreign_keys(database: str, table_name: str, schema: str = "dbo") -> str:
+def get_foreign_keys(connection_id: int, database: str, table_name: str, schema: str = "dbo") -> str:
     sql = """
         SELECT
             fk.name AS fk_name,
@@ -25,7 +25,7 @@ def get_foreign_keys(database: str, table_name: str, schema: str = "dbo") -> str
            OR (sr.name = ? AND tr.name = ?)
         ORDER BY fk.name
     """
-    return execute_query(database, sql, (schema, table_name, schema, table_name))
+    return execute_query(connection_id, database, sql, (schema, table_name, schema, table_name))
 
 
 definition = {

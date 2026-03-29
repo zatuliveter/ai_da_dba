@@ -1,7 +1,7 @@
 from backend.mssql_db import execute_query
 
 
-def get_database_info(database: str) -> str:
+def get_database_info(connection_id: int, database: str) -> str:
     sql = """
         with db_sizes
         as (
@@ -65,7 +65,7 @@ def get_database_info(database: str) -> str:
             cross join db_sizes s
         where d.database_id = db_id()
     """
-    return execute_query(database, sql)
+    return execute_query(connection_id, database, sql)
 
 
 definition = {

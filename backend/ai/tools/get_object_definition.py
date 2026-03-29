@@ -1,13 +1,13 @@
 from backend.mssql_db import execute_scalar
 
 
-def get_object_definition(database: str, object_name: str, schema: str = "dbo") -> str:
+def get_object_definition(connection_id: int, database: str, object_name: str, schema: str = "dbo") -> str:
     sql = """
         select sm.definition
         from sys.sql_modules sm
         where sm.object_id = object_id(QUOTENAME(?) + '.' + QUOTENAME(?))
     """
-    return execute_scalar(database, sql, (schema, object_name))
+    return execute_scalar(connection_id, database, sql, (schema, object_name))
 
 
 definition = {

@@ -1,8 +1,10 @@
 import xml.etree.ElementTree as ET
 
 import yaml
+from mssql_python import SQL_ATTR_LOGIN_TIMEOUT, connect
 
-from backend.mssql_db import get_connection
+from backend.ai.store import get_connection_string
+from backend.mssql_db import QUERY_TIMEOUT, connection_string_with_database
 
 
 def _parse_execution_plan(xml_plan: str) -> str:
@@ -87,9 +89,13 @@ def _parse_execution_plan(xml_plan: str) -> str:
     return yaml.dump(result, allow_unicode=True)
 
 
-def get_execution_plan(database: str, query: str) -> str:
+def get_execution_plan(connection_id: int, database: str, query: str) -> str:
     """Get estimated execution plan and return a text summary."""
-    with get_connection(database) as conn:
+    raw = get_connection_string(connection_id)
+    if not raw:
+        return yaml.dump({"error": "Unknown connection_id"}, allow_unicode=True)
+    cs = connection_string_with_database(raw, database)
+    with connect(cs, attrs_before={SQL_ATTR_LOGIN_TIMEOUT: QUERY_TIMEOUT}) as conn:
         cursor = conn.cursor()
         cursor.execute("SET SHOWPLAN_XML ON")
         cursor.execute(query)

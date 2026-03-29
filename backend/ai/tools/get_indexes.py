@@ -1,7 +1,7 @@
 from backend.mssql_db import execute_query
 
 
-def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
+def get_indexes(connection_id: int, database: str, table_name: str, schema: str = "dbo") -> str:
     sql = """
         select
           i.name as index_name
@@ -104,7 +104,7 @@ def get_indexes(database: str, table_name: str, schema: str = "dbo") -> str:
         order by i.is_primary_key desc
                , i.name;
     """
-    return execute_query(database, sql, (schema, table_name))
+    return execute_query(connection_id, database, sql, (schema, table_name))
 
 
 definition = {

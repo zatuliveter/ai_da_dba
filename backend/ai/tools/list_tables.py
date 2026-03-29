@@ -1,7 +1,7 @@
 from backend.mssql_db import execute_query
 
 
-def list_tables(database: str) -> str:
+def list_tables(connection_id: int, database: str) -> str:
     sql = """
         select
             concat(tt.table_schema, '.', tt.table_name) as table_name
@@ -24,7 +24,7 @@ def list_tables(database: str) -> str:
             ) stat
         order by table_type, table_name
     """
-    return execute_query(database, sql)
+    return execute_query(connection_id, database, sql)
 
 
 definition = {

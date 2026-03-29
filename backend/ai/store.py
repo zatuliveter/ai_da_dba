@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 
-from backend.config import DATA_DIR
+from backend.config import DATA_DIR, SQL_SERVER
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ MAX_MESSAGE_CONTENT_LENGTH = 200_000
 def _get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -147,62 +148,162 @@ def init_db() -> None:
             conn.execute("ALTER TABLE chat_messages ADD COLUMN completion_tokens INTEGER")
             conn.commit()
 
+        # Migration: MSSQL connections + database_descriptions scoped by connection_id
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS mssql_connections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                label TEXT NOT NULL,
+                connection_string TEXT NOT NULL
+            )
+            """
+        )
+        conn.commit()
+        cnt = conn.execute("SELECT COUNT(*) AS c FROM mssql_connections").fetchone()["c"]
+        if cnt == 0:
+            default_cs = f"SERVER={SQL_SERVER};Trusted_Connection=yes;"
+            conn.execute(
+                "INSERT INTO mssql_connections (label, connection_string) VALUES (?, ?)",
+                ("Default", default_cs),
+            )
+            conn.commit()
+
+        cur = conn.execute("PRAGMA table_info(database_descriptions)")
+        dd_cols = [row[1] for row in cur.fetchall()]
+        if "connection_id" not in dd_cols:
+            default_cid = conn.execute(
+                "SELECT id FROM mssql_connections ORDER BY id LIMIT 1"
+            ).fetchone()["id"]
+            conn.execute(
+                """
+                CREATE TABLE database_descriptions_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    connection_id INTEGER NOT NULL REFERENCES mssql_connections(id) ON DELETE CASCADE,
+                    name TEXT NOT NULL,
+                    description TEXT NOT NULL DEFAULT '',
+                    UNIQUE(connection_id, name)
+                )
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO database_descriptions_new (id, connection_id, name, description)
+                SELECT id, ?, name, description FROM database_descriptions
+                """,
+                (default_cid,),
+            )
+            conn.execute("DROP TABLE database_descriptions")
+            conn.execute("ALTER TABLE database_descriptions_new RENAME TO database_descriptions")
+            conn.commit()
+
     finally:
         conn.close()
 
 
 # ---------------------------------------------------------------------------
-# Database descriptions
+# MSSQL connections (full connection strings; secrets not exposed via list API)
 # ---------------------------------------------------------------------------
 
-def get_db_description(name: str) -> str:
-    """Return description for a database by name. Empty string if not set."""
+
+def list_mssql_connections() -> list[dict]:
+    """Return {id, label} for each saved connection."""
+    with _get_conn() as conn:
+        rows = conn.execute(
+            "SELECT id, label FROM mssql_connections ORDER BY id ASC"
+        ).fetchall()
+        return [{"id": r["id"], "label": r["label"]} for r in rows]
+
+
+def add_mssql_connection(label: str, connection_string: str) -> int:
+    """Insert a connection. Returns new id."""
+    with _get_conn() as conn:
+        cur = conn.execute(
+            "INSERT INTO mssql_connections (label, connection_string) VALUES (?, ?)",
+            (label.strip() or "Connection", (connection_string or "").strip()),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+
+
+def get_connection_string(connection_id: int) -> str | None:
+    """Return stored connection string or None if id missing."""
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT description FROM database_descriptions WHERE name = ?",
-            (name,),
+            "SELECT connection_string FROM mssql_connections WHERE id = ?",
+            (connection_id,),
+        ).fetchone()
+        return row["connection_string"] if row else None
+
+
+def delete_mssql_connection(connection_id: int) -> bool:
+    """Delete connection and CASCADE database_descriptions/chats for that connection. Returns False if id missing."""
+    with _get_conn() as conn:
+        cur = conn.execute("DELETE FROM mssql_connections WHERE id = ?", (connection_id,))
+        conn.commit()
+        return cur.rowcount > 0
+
+
+# ---------------------------------------------------------------------------
+# Database descriptions (scoped by connection_id)
+# ---------------------------------------------------------------------------
+
+
+def get_db_description(connection_id: int, name: str) -> str:
+    """Return description for a database on a connection. Empty string if not set."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT description FROM database_descriptions WHERE connection_id = ? AND name = ?",
+            (connection_id, name),
         ).fetchone()
         return row[0] if row else ""
 
 
-def set_db_description(name: str, description: str) -> None:
-    """Insert or replace description for a database."""
+def set_db_description(connection_id: int, name: str, description: str) -> None:
+    """Insert or update description for (connection_id, name)."""
     with _get_conn() as conn:
         conn.execute(
-            "INSERT INTO database_descriptions (name, description) VALUES (?, ?) "
-            "ON CONFLICT(name) DO UPDATE SET description = excluded.description",
-            (name, description or ""),
+            """
+            INSERT INTO database_descriptions (connection_id, name, description)
+            VALUES (?, ?, ?)
+            ON CONFLICT(connection_id, name) DO UPDATE SET description = excluded.description
+            """,
+            (connection_id, name, description or ""),
         )
         conn.commit()
 
 
-def get_or_create_database_id(name: str) -> int:
-    """Return database_descriptions.id for the given name; create row with empty description if missing."""
+def get_or_create_database_id(connection_id: int, name: str) -> int:
+    """Return database_descriptions.id; create row with empty description if missing."""
     with _get_conn() as conn:
         row = conn.execute(
-            "SELECT id FROM database_descriptions WHERE name = ?", (name,)
+            "SELECT id FROM database_descriptions WHERE connection_id = ? AND name = ?",
+            (connection_id, name),
         ).fetchone()
         if row:
-            return row["id"]
+            return int(row["id"])
         cur = conn.execute(
-            "INSERT INTO database_descriptions (name, description) VALUES (?, '')",
-            (name,),
+            "INSERT INTO database_descriptions (connection_id, name, description) VALUES (?, ?, '')",
+            (connection_id, name),
         )
         conn.commit()
-        return cur.lastrowid
+        return int(cur.lastrowid)
 
 
 # ---------------------------------------------------------------------------
 # Chats
 # ---------------------------------------------------------------------------
 
-def list_chats(database_name: str) -> list[dict]:
-    """Return list of chats for the given database, starred first then newest first."""
+def list_chats(connection_id: int, database_name: str) -> list[dict]:
+    """Return chats for the given database on the given connection."""
     with _get_conn() as conn:
         rows = conn.execute(
-            "SELECT id, title, created_at, starred FROM chats WHERE database_name = ? "
-            "ORDER BY created_at DESC",
-            (database_name,),
+            """
+            SELECT c.id, c.title, c.created_at, c.starred FROM chats c
+            INNER JOIN database_descriptions dd ON c.database_id = dd.id
+            WHERE dd.connection_id = ? AND dd.name = ?
+            ORDER BY c.created_at DESC
+            """,
+            (connection_id, database_name),
         ).fetchall()
         return [
             {
@@ -215,9 +316,9 @@ def list_chats(database_name: str) -> list[dict]:
         ]
 
 
-def create_chat(database_name: str, title: str = "Новый чат") -> dict:
-    """Create a new chat for the database. Returns {id, title, created_at, starred}."""
-    database_id = get_or_create_database_id(database_name)
+def create_chat(connection_id: int, database_name: str, title: str = "Новый чат") -> dict:
+    """Create a new chat for the database on this connection. Returns {id, title, created_at, starred}."""
+    database_id = get_or_create_database_id(connection_id, database_name)
     now = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
     with _get_conn() as conn:
         cur = conn.execute(
@@ -343,6 +444,23 @@ def get_chat_database_name(chat_id: int) -> str | None:
             "SELECT database_name FROM chats WHERE id = ?", (chat_id,)
         ).fetchone()
         return row["database_name"] if row else None
+
+
+def get_chat_scope(chat_id: int) -> tuple[int, str] | None:
+    """Return (connection_id, database name) for the chat, or None."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            """
+            SELECT dd.connection_id, dd.name AS db_name
+            FROM chats c
+            INNER JOIN database_descriptions dd ON c.database_id = dd.id
+            WHERE c.id = ?
+            """,
+            (chat_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return (int(row["connection_id"]), row["db_name"])
 
 
 def set_chat_starred(chat_id: int, starred: bool) -> None:

@@ -5,9 +5,12 @@ from backend.mssql_db import execute_query, execute_scalar
 from ._columns_sql import COLUMNS_SQL
 
 
-def get_table_type_definition(database: str, table_type_name: str, schema: str = "dbo") -> str:
+def get_table_type_definition(
+    connection_id: int, database: str, table_type_name: str, schema: str = "dbo"
+) -> str:
     params = (schema, table_type_name)
     object_id = execute_scalar(
+        connection_id,
         database,
         """
         select type_table_object_id
@@ -18,7 +21,7 @@ def get_table_type_definition(database: str, table_type_name: str, schema: str =
     """,
         params,
     )
-    columns_yaml = execute_query(database, COLUMNS_SQL, (object_id,))
+    columns_yaml = execute_query(connection_id, database, COLUMNS_SQL, (object_id,))
     columns = yaml.safe_load(columns_yaml) or []
     columns_cleared = [item["col"] for item in columns]
     return yaml.dump(columns_cleared, allow_unicode=True)

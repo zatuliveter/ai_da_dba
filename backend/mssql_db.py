@@ -1,29 +1,54 @@
 import yaml
-from mssql_python import Connection, Cursor, SQL_ATTR_LOGIN_TIMEOUT, connect
+from mssql_python import Cursor, SQL_ATTR_LOGIN_TIMEOUT, connect
 
-from backend.config import SQL_SERVER
+from backend.ai.store import get_connection_string
 
 MAX_ROWS = 1000
 QUERY_TIMEOUT = 30
 
-_connection_string = (
-    f"SERVER={SQL_SERVER};"
-    f"Trusted_Connection=yes;"
-)
+# Keys that pin the default database on the instance (strip for listing / override for queries)
+_DB_KEYS = frozenset({"DATABASE", "INITIAL CATALOG"})
 
 
-def get_connection(database: str | None = None) -> Connection:
-    cs = _connection_string
-    if database:
-        cs += f"DATABASE={database};"
-    return connect(
-        cs,
-        attrs_before={SQL_ATTR_LOGIN_TIMEOUT: QUERY_TIMEOUT},
-    )
+def _parse_connection_segments(raw: str) -> list[tuple[str, str]]:
+    """Parse 'KEY=value;...' pairs preserving original key spelling for the first occurrence."""
+    pairs: list[tuple[str, str]] = []
+    seen_upper: set[str] = set()
+    for segment in raw.split(";"):
+        seg = segment.strip()
+        if not seg:
+            continue
+        if "=" not in seg:
+            continue
+        key, val = seg.split("=", 1)
+        ku = key.strip().upper()
+        if ku in _DB_KEYS:
+            continue
+        k0 = key.strip()
+        if ku in seen_upper:
+            continue
+        seen_upper.add(ku)
+        pairs.append((k0, val.strip()))
+    return pairs
 
 
-def list_databases() -> list[str]:
-    with get_connection() as conn:
+def connection_string_for_instance_scope(raw: str) -> str:
+    """Force connection to master for listing databases / server-level queries."""
+    pairs = _parse_connection_segments(raw)
+    pairs.append(("DATABASE", "master"))
+    return ";".join(f"{k}={v}" for k, v in pairs)
+
+
+def connection_string_with_database(raw: str, database: str) -> str:
+    """Build a string that uses the given database name."""
+    pairs = _parse_connection_segments(raw)
+    pairs.append(("DATABASE", database))
+    return ";".join(f"{k}={v}" for k, v in pairs)
+
+
+def list_databases(connection_string: str) -> list[str]:
+    cs = connection_string_for_instance_scope(connection_string)
+    with connect(cs, attrs_before={SQL_ATTR_LOGIN_TIMEOUT: QUERY_TIMEOUT}) as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT name FROM sys.databases "
@@ -64,32 +89,38 @@ def rows_to_yaml(cursor: Cursor, max_rows: int = MAX_ROWS) -> str:
     return yaml.dump(result, allow_unicode=True)
 
 
-def execute_query(database: str, sql: str, params: tuple = ()) -> str:
-    with get_connection(database) as conn:
+def execute_query(connection_id: int, database: str, sql: str, params: tuple = ()) -> str:
+    raw = get_connection_string(connection_id)
+    if not raw:
+        return yaml.dump({"error": "Unknown connection_id"}, allow_unicode=True)
+    cs = connection_string_with_database(raw, database)
+    with connect(cs, attrs_before={SQL_ATTR_LOGIN_TIMEOUT: QUERY_TIMEOUT}) as conn:
         cursor = conn.cursor()
         cursor.execute(sql, params)
         if cursor.description:
             return rows_to_yaml(cursor)
         return yaml.dump({"affected_rows": cursor.rowcount}, allow_unicode=True)
 
-def execute_scalar(database: str, sql: str, params: tuple = ()) -> str | None:
-    with get_connection(database) as conn:
+
+def execute_scalar(connection_id: int, database: str, sql: str, params: tuple = ()) -> str | None:
+    raw = get_connection_string(connection_id)
+    if not raw:
+        return None
+    cs = connection_string_with_database(raw, database)
+    with connect(cs, attrs_before={SQL_ATTR_LOGIN_TIMEOUT: QUERY_TIMEOUT}) as conn:
         cursor = conn.cursor()
         cursor.execute(sql, params)
 
-        # no result set (e.g. update/delete)
         if not cursor.description:
             return None
 
         row = cursor.fetchone()
 
-        # no rows returned
         if row is None:
             return None
 
         value = row[0]
 
-        # sql null
         if value is None:
             return None
 

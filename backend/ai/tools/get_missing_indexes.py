@@ -1,7 +1,9 @@
 from backend.mssql_db import execute_query
 
 
-def get_missing_indexes(database: str, table_name: str | None = None, schema: str = "dbo") -> str:
+def get_missing_indexes(
+    connection_id: int, database: str, table_name: str | None = None, schema: str = "dbo"
+) -> str:
     sql = """
         SELECT
             s.name AS schema_name,
@@ -26,7 +28,7 @@ def get_missing_indexes(database: str, table_name: str | None = None, schema: st
 
     sql += " ORDER BY migs.avg_user_impact * (migs.user_seeks + migs.user_scans) DESC"
 
-    return execute_query(database, sql, tuple(params))
+    return execute_query(connection_id, database, sql, tuple(params))
 
 
 definition = {

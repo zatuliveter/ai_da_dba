@@ -5,7 +5,7 @@ import yaml
 from backend.mssql_db import MAX_ROWS, execute_query
 
 
-def execute_read_query(database: str, query: str) -> str:
+def execute_read_query(connection_id: int, database: str, query: str) -> str:
     normalized = re.sub(r"--[^\n]*", "", query)
     normalized = re.sub(r"/\*.*?\*/", "", normalized, flags=re.DOTALL)
     normalized = normalized.strip().upper()
@@ -20,7 +20,7 @@ def execute_read_query(database: str, query: str) -> str:
         if token in forbidden:
             return yaml.dump({"error": f"Forbidden keyword: {token}"}, allow_unicode=True)
 
-    return execute_query(database, query)
+    return execute_query(connection_id, database, query)
 
 
 definition = {

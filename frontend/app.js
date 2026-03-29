@@ -1,6 +1,13 @@
 const chatContainer = document.getElementById("chat-container");
 const chatInner = document.getElementById("chat-inner");
 const welcomeEl = document.getElementById("welcome");
+const connectionSelect = document.getElementById("connection-select");
+const addConnectionBtn = document.getElementById("add-connection-btn");
+const connectionModal = document.getElementById("connection-modal");
+const connModalLabel = document.getElementById("conn-modal-label");
+const connModalString = document.getElementById("conn-modal-string");
+const connModalCancel = document.getElementById("conn-modal-cancel");
+const connModalSave = document.getElementById("conn-modal-save");
 const dbSelect = document.getElementById("db-select");
 const dbDescriptionWrap = document.getElementById("db-description-wrap");
 const dbDescription = document.getElementById("db-description");
@@ -23,6 +30,7 @@ const EMPTY_TOKEN_STATS = {
 };
 
 let ws = null;
+let currentConnectionId = null;
 let currentDatabase = null;
 let currentChatId = null;
 let databases = []; // [{name, description}]
@@ -31,6 +39,11 @@ let pendingMessage = null;
 let pendingAttachments = null; // File[] when creating new chat
 let attachedFiles = []; // File[] for current compose
 let currentRole = localStorage.getItem("ai_da_dba_role") || "assistant";
+
+function connectionQuery() {
+    if (currentConnectionId == null) return "";
+    return `?connection_id=${encodeURIComponent(currentConnectionId)}`;
+}
 
 // stream state
 let currentStreamDiv = null;
@@ -167,8 +180,14 @@ function connectWS() {
         console.log("[WS] Connected");
         setStatus("connected");
         ws.send(JSON.stringify({ type: "set_role", role: currentRole }));
-        if (currentDatabase) {
-            ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
+        if (currentConnectionId != null && currentDatabase) {
+            ws.send(
+                JSON.stringify({
+                    type: "set_database",
+                    connection_id: currentConnectionId,
+                    database: currentDatabase,
+                })
+            );
             if (currentChatId != null) {
                 ws.send(JSON.stringify({ type: "set_chat", chat_id: currentChatId }));
             }
@@ -284,7 +303,7 @@ function handleMessage(data) {
                                 for (const f of pendingAttachments) {
                                     form.append("files", f);
                                 }
-                                const url = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files`;
+                                const url = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files${connectionQuery()}`;
                                 const resp = await fetch(url, { method: "POST", body: form });
                                 if (!resp.ok) throw new Error("Upload failed");
                                 const uploadData = await resp.json();
@@ -401,7 +420,7 @@ function appendUser(text, attachmentFilenames) {
         linksWrap.className = "msg-user-attachments";
         for (const name of attachmentFilenames) {
             const chip = document.createElement("a");
-            chip.href = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files/${encodeURIComponent(name)}`;
+            chip.href = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${currentChatId}/files/${encodeURIComponent(name)}${connectionQuery()}`;
             chip.target = "_blank";
             chip.rel = "noopener";
             chip.className = "msg-user-file";
@@ -549,7 +568,7 @@ function handleStreamChunk(content) {
 
 function setInputEnabled(enabled) {
     userInput.disabled = !enabled;
-    const canSend = enabled && currentDatabase;
+    const canSend = enabled && currentDatabase && currentConnectionId != null;
     sendBtn.disabled = !canSend;
     if (enabled) userInput.focus();
 }
@@ -560,7 +579,7 @@ async function uploadFilesForChat(chatId) {
     for (const f of attachedFiles) {
         form.append("files", f);
     }
-    const url = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chatId}/files`;
+    const url = `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chatId}/files${connectionQuery()}`;
     const resp = await fetch(url, { method: "POST", body: form });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -578,6 +597,10 @@ function sendMessage() {
     const hasAttachments = attachedFiles.length > 0;
     if (!text && !hasAttachments) return;
 
+    if (currentConnectionId == null) {
+        appendError("Please select a connection first.");
+        return;
+    }
     if (!currentDatabase) {
         appendError("Please select a database first.");
         return;
@@ -701,12 +724,84 @@ userInput.addEventListener("input", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Database selector & description
+// Connection & database selectors
 // ---------------------------------------------------------------------------
 
-async function loadDatabases() {
+async function loadConnections(preferConnectionId = null) {
     try {
-        const resp = await fetch("/api/databases");
+        const resp = await fetch("/api/connections");
+        const data = await resp.json();
+        const list = data.connections || [];
+        connectionSelect.innerHTML = '<option value="">-- select connection --</option>';
+        for (const c of list) {
+            const opt = document.createElement("option");
+            opt.value = String(c.id);
+            opt.textContent = c.label;
+            connectionSelect.appendChild(opt);
+        }
+        const savedConn = localStorage.getItem("ai_da_dba_connection");
+        if (
+            preferConnectionId != null &&
+            list.some((c) => c.id === preferConnectionId)
+        ) {
+            connectionSelect.value = String(preferConnectionId);
+            currentConnectionId = preferConnectionId;
+            localStorage.setItem("ai_da_dba_connection", String(preferConnectionId));
+        } else if (savedConn && list.some((c) => String(c.id) === savedConn)) {
+            connectionSelect.value = savedConn;
+            currentConnectionId = parseInt(savedConn, 10);
+        } else if (list.length === 1) {
+            connectionSelect.value = String(list[0].id);
+            currentConnectionId = list[0].id;
+            localStorage.setItem("ai_da_dba_connection", String(list[0].id));
+        } else {
+            currentConnectionId = null;
+        }
+        await loadDatabases();
+    } catch (e) {
+        connectionSelect.innerHTML = '<option value="">Error</option>';
+        appendError("Failed to load connections: " + e.message);
+    }
+}
+
+async function onConnectionChange() {
+    const v = connectionSelect.value;
+    currentConnectionId = v ? parseInt(v, 10) : null;
+    if (currentConnectionId != null) {
+        localStorage.setItem("ai_da_dba_connection", String(currentConnectionId));
+    } else {
+        localStorage.removeItem("ai_da_dba_connection");
+    }
+    currentDatabase = null;
+    currentChatId = null;
+    dbSelect.innerHTML = '<option value="">-- select database --</option>';
+    chatListEl.innerHTML = "";
+    dbDescriptionWrap.classList.add("hidden");
+    newChatBtn.disabled = true;
+    clearChatUI();
+    saveState();
+    if (currentConnectionId != null) {
+        await loadDatabases();
+    }
+    if (ws && ws.readyState === WebSocket.OPEN && currentConnectionId != null && currentDatabase) {
+        ws.send(
+            JSON.stringify({
+                type: "set_database",
+                connection_id: currentConnectionId,
+                database: currentDatabase,
+            })
+        );
+    }
+}
+
+async function loadDatabases() {
+    if (currentConnectionId == null) {
+        databases = [];
+        dbSelect.innerHTML = '<option value="">-- select connection first --</option>';
+        return;
+    }
+    try {
+        const resp = await fetch(`/api/databases${connectionQuery()}`);
         const data = await resp.json();
 
         databases = data.databases || [];
@@ -719,7 +814,12 @@ async function loadDatabases() {
         }
 
         const savedDb = localStorage.getItem("ai_da_dba_db");
-        if (savedDb && databases.some((d) => d.name === savedDb)) {
+        const savedConn = localStorage.getItem("ai_da_dba_connection");
+        if (
+            savedDb &&
+            savedConn === String(currentConnectionId) &&
+            databases.some((d) => d.name === savedDb)
+        ) {
             dbSelect.value = savedDb;
             await onDatabaseChange(savedDb);
         }
@@ -736,7 +836,7 @@ async function loadDatabases() {
 function saveDescription() {
     if (!currentDatabase) return;
     const desc = dbDescription.value.trim();
-    fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/description`, {
+    fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/description${connectionQuery()}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: desc }),
@@ -764,7 +864,7 @@ dbDescription.addEventListener("blur", () => {
 
 async function loadChats(dbName) {
     try {
-        const resp = await fetch(`/api/databases/${encodeURIComponent(dbName)}/chats`);
+        const resp = await fetch(`/api/databases/${encodeURIComponent(dbName)}/chats${connectionQuery()}`);
         const data = await resp.json();
         const chats = (data.chats || []).slice();
         // Backend returns starred first, then by date; keep that order
@@ -798,11 +898,14 @@ function addChatToList(chat, insertAtTop = false) {
         e.stopPropagation();
         if (!currentDatabase) return;
         const newStarred = !starred;
-        fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chat.id}/star`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ starred: newStarred }),
-        })
+        fetch(
+            `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chat.id}/star${connectionQuery()}`,
+            {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ starred: newStarred }),
+            }
+        )
             .then((res) => res.json())
             .then(() => loadChats(currentDatabase))
             .catch((err) => {
@@ -854,7 +957,7 @@ function addChatToList(chat, insertAtTop = false) {
         e.stopPropagation();
         if (!currentDatabase) return;
         if (!confirm("Удалить этот чат? Действие нельзя отменить.")) return;
-        fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chat.id}`, {
+        fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chat.id}${connectionQuery()}`, {
             method: "DELETE",
         })
             .then((res) => {
@@ -868,8 +971,14 @@ function addChatToList(chat, insertAtTop = false) {
                     clearChatUI();
                     updateChatActiveState();
                     saveState();
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
+                    if (ws && ws.readyState === WebSocket.OPEN && currentConnectionId != null) {
+                        ws.send(
+                            JSON.stringify({
+                                type: "set_database",
+                                connection_id: currentConnectionId,
+                                database: currentDatabase,
+                            })
+                        );
                     }
                 }
             })
@@ -924,11 +1033,14 @@ function startEditChatTitle(li, chatId, titleSpan) {
         const newTitle = (input.value.trim() || "Новый чат").slice(0, 80);
         row1.replaceChild(titleSpan, input);
         if (save && newTitle !== currentTitle) {
-            fetch(`/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chatId}/title`, {
-                method: "PATCH",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ title: newTitle }),
-            })
+            fetch(
+                `/api/databases/${encodeURIComponent(currentDatabase)}/chats/${chatId}/title${connectionQuery()}`,
+                {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ title: newTitle }),
+                }
+            )
                 .then((res) => res.json())
                 .then((data) => {
                     titleSpan.textContent = (data && data.title) || newTitle;
@@ -987,8 +1099,14 @@ async function onDatabaseChange(db) {
         dbDescription.value = (d && d.description) || "";
         await loadChats(db);
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "set_database", database: db }));
+        if (ws && ws.readyState === WebSocket.OPEN && currentConnectionId != null) {
+            ws.send(
+                JSON.stringify({
+                    type: "set_database",
+                    connection_id: currentConnectionId,
+                    database: db,
+                })
+            );
         } else if (!ws || ws.readyState === WebSocket.CLOSED) {
             connectWS();
         }
@@ -1024,12 +1142,21 @@ newChatBtn.addEventListener("click", () => {
     clearChatUI();
     saveState();
     setInputEnabled(true);
-    if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "set_database", database: currentDatabase }));
+    if (ws && ws.readyState === WebSocket.OPEN && currentConnectionId != null) {
+        ws.send(
+            JSON.stringify({
+                type: "set_database",
+                connection_id: currentConnectionId,
+                database: currentDatabase,
+            })
+        );
     }
 });
 
 function saveState() {
+    if (currentConnectionId != null) {
+        localStorage.setItem("ai_da_dba_connection", String(currentConnectionId));
+    }
     if (currentDatabase) localStorage.setItem("ai_da_dba_db", currentDatabase);
     if (currentChatId != null) localStorage.setItem("ai_da_dba_chat", String(currentChatId));
 }
@@ -1038,6 +1165,54 @@ function saveState() {
 // Init
 // ---------------------------------------------------------------------------
 
-loadDatabases();
+connectionSelect.addEventListener("change", () => {
+    onConnectionChange();
+});
+
+addConnectionBtn.addEventListener("click", () => {
+    connModalLabel.value = "";
+    connModalString.value = "";
+    connectionModal.classList.remove("hidden");
+    connectionModal.setAttribute("aria-hidden", "false");
+    connModalLabel.focus();
+});
+
+function closeConnectionModal() {
+    connectionModal.classList.add("hidden");
+    connectionModal.setAttribute("aria-hidden", "true");
+}
+
+connModalCancel.addEventListener("click", closeConnectionModal);
+
+connectionModal.addEventListener("click", (e) => {
+    if (e.target === connectionModal) closeConnectionModal();
+});
+
+connModalSave.addEventListener("click", async () => {
+    const label = (connModalLabel.value || "").trim() || "Connection";
+    const connection_string = (connModalString.value || "").trim();
+    if (!connection_string) {
+        appendError("Connection string is required.");
+        return;
+    }
+    try {
+        const resp = await fetch("/api/connections", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ label, connection_string }),
+        });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const created = await resp.json();
+        closeConnectionModal();
+        await loadConnections(created.id != null ? created.id : null);
+    } catch (e) {
+        appendError("Failed to save connection: " + e.message);
+    }
+});
+
+loadConnections();
 connectWS();
 document.getElementById("app-title").addEventListener("click", () => location.reload());

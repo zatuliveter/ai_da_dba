@@ -1,6 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 
 from backend.web.common.dependencies import require_chat_belongs_to_db
 from backend.ai.store import (
@@ -17,10 +17,13 @@ router = APIRouter(prefix="/api/databases", tags=["chats"])
 
 
 @router.get("/{name}/chats")
-def api_list_chats(name: str):
+def api_list_chats(
+    name: str,
+    connection_id: int = Query(..., description="MSSQL connection id"),
+):
     """List chats for the given database."""
     try:
-        chats = list_chats(name)
+        chats = list_chats(connection_id, name)
         return {"chats": chats}
     except Exception as e:
         log.error("Failed to list chats for %s: %s", name, e)
@@ -28,21 +31,26 @@ def api_list_chats(name: str):
 
 
 @router.post("/{name}/chats")
-def api_create_chat(name: str, body: dict = Body(default=None)):
+def api_create_chat(
+    name: str,
+    connection_id: int = Query(..., description="MSSQL connection id"),
+    body: dict = Body(default=None),
+):
     """Create a new chat for the database. Body optional: {"title": "..."}. Returns {id, title, created_at, starred}."""
     try:
         title = (body or {}).get("title", "Новый чат") or "Новый чат"
-        chat = create_chat(name, title)
+        chat = create_chat(connection_id, name, title)
         return chat
     except Exception as e:
         log.error("Failed to create chat for %s: %s", name, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.patch("/{name}/chats/{chat_id}/title")
 def api_set_chat_title(
     name: str,
     chat_id: int,
+    connection_id: int = Query(..., description="MSSQL connection id"),
     body: dict = Body(default=None),
     _: str = Depends(require_chat_belongs_to_db),
 ):
@@ -55,13 +63,14 @@ def api_set_chat_title(
         if hasattr(e, "status_code"):
             raise
         log.error("Failed to set title for chat %s: %s", chat_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.patch("/{name}/chats/{chat_id}/star")
 def api_set_chat_starred(
     name: str,
     chat_id: int,
+    connection_id: int = Query(..., description="MSSQL connection id"),
     body: dict = Body(default=None),
     _: str = Depends(require_chat_belongs_to_db),
 ):
@@ -74,13 +83,14 @@ def api_set_chat_starred(
         if hasattr(e, "status_code"):
             raise
         log.error("Failed to set starred for chat %s: %s", chat_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/{name}/chats/{chat_id}")
 def api_delete_chat(
     name: str,
     chat_id: int,
+    connection_id: int = Query(..., description="MSSQL connection id"),
     _: str = Depends(require_chat_belongs_to_db),
 ):
     """Delete a chat. Chat must belong to this database."""
@@ -91,4 +101,4 @@ def api_delete_chat(
         raise
     except Exception as e:
         log.error("Failed to delete chat %s: %s", chat_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=str(e)) from e

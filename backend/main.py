@@ -19,6 +19,7 @@ logging.config.dictConfig(_log_config)
 from backend.config import validate_config
 from backend.web.routers.chat_files import router as chat_files_router
 from backend.web.routers.chats import router as chats_router
+from backend.web.routers.connections import router as connections_router
 from backend.web.routers.databases import router as databases_router
 from backend.web.frontend_mount import mount_frontend
 from backend.ai.store import init_db
@@ -34,6 +35,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AI da DBA", lifespan=lifespan)
 
+app.include_router(connections_router)
 app.include_router(databases_router)
 app.include_router(chats_router)
 app.include_router(chat_files_router)

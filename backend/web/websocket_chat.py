@@ -11,6 +11,7 @@ from backend.ai.store import (
     append_chat_messages,
     create_chat,
     get_chat_messages,
+    get_chat_scope,
     get_chat_token_stats,
 )
 
@@ -22,6 +23,7 @@ router = APIRouter()
 @router.websocket("/ws")
 async def ws_chat(ws: WebSocket):
     await ws.accept()
+    connection_id: int | None = None
     database: str | None = None
     chat_id: int | None = None
     agent_role: str = DEFAULT_ROLE
@@ -31,12 +33,32 @@ async def ws_chat(ws: WebSocket):
             raw = await ws.receive_text()
             payload = json.loads(raw)
 
+            if payload.get("type") == "set_role":
+                role = payload.get("role")
+                if role in ("assistant", "dba"):
+                    agent_role = role
+                continue
+
             if payload.get("type") == "set_chat":
+                if connection_id is None or not database:
+                    await ws.send_text(
+                        json.dumps({"type": "error", "content": "Select connection and database first."})
+                    )
+                    continue
                 cid = payload.get("chat_id")
                 if cid is None:
                     await ws.send_text(json.dumps({"type": "error", "content": "chat_id required"}))
                     continue
                 chat_id = int(cid)
+                scope = get_chat_scope(chat_id)
+                if scope is None or scope[0] != connection_id or scope[1] != database:
+                    await ws.send_text(
+                        json.dumps({
+                            "type": "error",
+                            "content": "Chat not found for this connection and database.",
+                        })
+                    )
+                    continue
                 history = get_chat_messages(chat_id)
                 await ws.send_text(json.dumps({
                     "type": "history_loaded",
@@ -53,9 +75,18 @@ async def ws_chat(ws: WebSocket):
                 continue
 
             if payload.get("type") == "set_database":
+                conn_raw = payload.get("connection_id")
                 db_name = payload.get("database")
+                if conn_raw is None:
+                    await ws.send_text(json.dumps({"type": "error", "content": "connection_id required"}))
+                    continue
                 if not db_name:
                     await ws.send_text(json.dumps({"type": "error", "content": "database required"}))
+                    continue
+                try:
+                    connection_id = int(conn_raw)
+                except (TypeError, ValueError):
+                    await ws.send_text(json.dumps({"type": "error", "content": "invalid connection_id"}))
                     continue
                 database = str(db_name)
                 chat_id = None
@@ -67,11 +98,11 @@ async def ws_chat(ws: WebSocket):
                 continue
 
             if payload.get("type") == "create_chat":
-                if not database:
+                if connection_id is None or not database:
                     await ws.send_text(json.dumps({"type": "error", "content": "Select a database first."}))
                     continue
                 title = payload.get("title", "Новый чат") or "Новый чат"
-                chat = create_chat(database, title)
+                chat = create_chat(connection_id, database, title)
                 chat_id = chat["id"]
                 await ws.send_text(json.dumps({
                     "type": "chat_created",
@@ -85,7 +116,7 @@ async def ws_chat(ws: WebSocket):
                 continue
 
             if payload.get("type") == "message":
-                if not database:
+                if connection_id is None or not database:
                     await ws.send_text(json.dumps({
                         "type": "error",
                         "content": "Please select a database first.",
@@ -131,7 +162,7 @@ async def ws_chat(ws: WebSocket):
                 user_msg = ChatMessage(role="user", content=full_content)
                 append_chat_messages(chat_id, [user_msg])
 
-                await run_agent_loop(ws, database, agent_role, chat_id)
+                await run_agent_loop(ws, connection_id, database, agent_role, chat_id)
                 continue
 
     except WebSocketDisconnect:

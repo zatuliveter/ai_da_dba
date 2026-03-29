@@ -124,11 +124,12 @@ def chat_messages_to_api_messages(stored: list[ChatMessage]) -> list[dict]:
 
 async def run_agent_loop(
     ws: WebSocket,
+    connection_id: int,
     database: str,
     agent_role: str,
     chat_id: int,
 ):
-    description = get_db_description(database) or ""
+    description = get_db_description(connection_id, database) or ""
     db_context = f"\n\nYou are working with database: {database}."
     if description:
         db_context += f" User-provided context: {description}"
@@ -231,7 +232,7 @@ async def run_agent_loop(
                     "args": t_args,
                 }))
 
-                result = dispatch_tool(t_name, t_args, database)
+                result = dispatch_tool(t_name, t_args, connection_id, database)
                 if result is None or result == "":
                     result = "(tool returned no result)"
                 if len(result) > MAX_TOOL_RESULT_LENGTH:

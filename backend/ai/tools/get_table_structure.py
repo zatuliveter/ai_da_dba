@@ -5,7 +5,7 @@ from backend.mssql_db import execute_query, execute_scalar
 from ._columns_sql import COLUMNS_SQL
 
 
-def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> str:
+def get_table_structure(connection_id: int, database: str, table_name: str, schema: str = "dbo") -> str:
 
     stats_sql = """
         with o ( object_id )
@@ -55,9 +55,11 @@ def get_table_structure(database: str, table_name: str, schema: str = "dbo") -> 
 			) ds
     """
     params = (schema, table_name)
-    object_id = execute_scalar(database, "select object_id(quotename(?) + '.' + quotename(?))", params)
-    columns_yaml = execute_query(database, COLUMNS_SQL, (object_id,))
-    stats_yaml = execute_query(database, stats_sql, params)
+    object_id = execute_scalar(
+        connection_id, database, "select object_id(quotename(?) + '.' + quotename(?))", params
+    )
+    columns_yaml = execute_query(connection_id, database, COLUMNS_SQL, (object_id,))
+    stats_yaml = execute_query(connection_id, database, stats_sql, params)
     columns = yaml.safe_load(columns_yaml) or []
     columns_cleared = [item["col"] for item in columns]
     stats_list = yaml.safe_load(stats_yaml) or []

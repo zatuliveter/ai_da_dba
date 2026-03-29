@@ -1,11 +1,18 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, Query
 
-from backend.ai.store import get_chat_database_name
+from backend.ai.store import get_chat_scope
 
 
-def require_chat_belongs_to_db(name: str, chat_id: int) -> str:
-    """Ensure chat exists and belongs to the given database. Return database_name or raise HTTPException(404)."""
-    db_name = get_chat_database_name(chat_id)
-    if db_name is None or db_name != name:
+def require_chat_belongs_to_db(
+    name: str,
+    chat_id: int,
+    connection_id: int = Query(..., description="MSSQL connection id"),
+) -> str:
+    """Ensure chat exists and belongs to the given connection and database name."""
+    scope = get_chat_scope(chat_id)
+    if scope is None:
         raise HTTPException(status_code=404, detail="Chat not found")
-    return db_name
+    cid, db_name = scope
+    if cid != connection_id or db_name != name:
+        raise HTTPException(status_code=404, detail="Chat not found")
+    return name
