@@ -235,6 +235,39 @@ def get_connection_string(connection_id: int) -> str | None:
         return row["connection_string"] if row else None
 
 
+def get_mssql_connection(connection_id: int) -> dict | None:
+    """Return {id, label, connection_string} for editing, or None if missing."""
+    with _get_conn() as conn:
+        row = conn.execute(
+            "SELECT id, label, connection_string FROM mssql_connections WHERE id = ?",
+            (connection_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return {
+            "id": row["id"],
+            "label": row["label"],
+            "connection_string": row["connection_string"],
+        }
+
+
+def update_mssql_connection(
+    connection_id: int, label: str, connection_string: str
+) -> bool:
+    """Update label and connection string. Returns False if id missing."""
+    with _get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE mssql_connections SET label = ?, connection_string = ? WHERE id = ?",
+            (
+                label.strip() or "Connection",
+                (connection_string or "").strip(),
+                connection_id,
+            ),
+        )
+        conn.commit()
+        return cur.rowcount > 0
+
+
 def delete_mssql_connection(connection_id: int) -> bool:
     """Delete connection and CASCADE database_descriptions/chats for that connection. Returns False if id missing."""
     with _get_conn() as conn:

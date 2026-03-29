@@ -2,8 +2,10 @@ const chatContainer = document.getElementById("chat-container");
 const chatInner = document.getElementById("chat-inner");
 const welcomeEl = document.getElementById("welcome");
 const connectionSelect = document.getElementById("connection-select");
+const editConnectionBtn = document.getElementById("edit-connection-btn");
 const addConnectionBtn = document.getElementById("add-connection-btn");
 const connectionModal = document.getElementById("connection-modal");
+const connectionModalTitle = document.getElementById("connection-modal-title");
 const connModalLabel = document.getElementById("conn-modal-label");
 const connModalString = document.getElementById("conn-modal-string");
 const connModalCancel = document.getElementById("conn-modal-cancel");
@@ -31,6 +33,8 @@ const EMPTY_TOKEN_STATS = {
 
 let ws = null;
 let currentConnectionId = null;
+/** @type {number|null} when modal is open for edit */
+let connModalEditingId = null;
 let currentDatabase = null;
 let currentChatId = null;
 let databases = []; // [{name, description}]
@@ -727,6 +731,12 @@ userInput.addEventListener("input", () => {
 // Connection & database selectors
 // ---------------------------------------------------------------------------
 
+function syncEditConnectionButton() {
+    const has = Boolean(connectionSelect.value);
+    editConnectionBtn.disabled = !has;
+    editConnectionBtn.setAttribute("aria-disabled", has ? "false" : "true");
+}
+
 async function loadConnections(preferConnectionId = null) {
     try {
         const resp = await fetch("/api/connections");
@@ -757,9 +767,11 @@ async function loadConnections(preferConnectionId = null) {
         } else {
             currentConnectionId = null;
         }
+        syncEditConnectionButton();
         await loadDatabases();
     } catch (e) {
         connectionSelect.innerHTML = '<option value="">Error</option>';
+        syncEditConnectionButton();
         appendError("Failed to load connections: " + e.message);
     }
 }
@@ -767,6 +779,7 @@ async function loadConnections(preferConnectionId = null) {
 async function onConnectionChange() {
     const v = connectionSelect.value;
     currentConnectionId = v ? parseInt(v, 10) : null;
+    syncEditConnectionButton();
     if (currentConnectionId != null) {
         localStorage.setItem("ai_da_dba_connection", String(currentConnectionId));
     } else {
@@ -1169,15 +1182,44 @@ connectionSelect.addEventListener("change", () => {
     onConnectionChange();
 });
 
-addConnectionBtn.addEventListener("click", () => {
+function openAddConnectionModal() {
+    connModalEditingId = null;
+    connectionModalTitle.textContent = "Add MSSQL connection";
     connModalLabel.value = "";
     connModalString.value = "";
     connectionModal.classList.remove("hidden");
     connectionModal.setAttribute("aria-hidden", "false");
     connModalLabel.focus();
+}
+
+addConnectionBtn.addEventListener("click", () => {
+    openAddConnectionModal();
+});
+
+editConnectionBtn.addEventListener("click", async () => {
+    const id = connectionSelect.value;
+    if (!id) return;
+    try {
+        const resp = await fetch(`/api/connections/${encodeURIComponent(id)}`);
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.detail || `HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        connModalEditingId = parseInt(id, 10);
+        connectionModalTitle.textContent = "Edit MSSQL connection";
+        connModalLabel.value = data.label || "";
+        connModalString.value = data.connection_string || "";
+        connectionModal.classList.remove("hidden");
+        connectionModal.setAttribute("aria-hidden", "false");
+        connModalLabel.focus();
+    } catch (e) {
+        appendError("Failed to load connection: " + e.message);
+    }
 });
 
 function closeConnectionModal() {
+    connModalEditingId = null;
     connectionModal.classList.add("hidden");
     connectionModal.setAttribute("aria-hidden", "true");
 }
@@ -1195,9 +1237,15 @@ connModalSave.addEventListener("click", async () => {
         appendError("Connection string is required.");
         return;
     }
+    const editingId = connModalEditingId;
+    const url =
+        editingId != null
+            ? `/api/connections/${encodeURIComponent(editingId)}`
+            : "/api/connections";
+    const method = editingId != null ? "PATCH" : "POST";
     try {
-        const resp = await fetch("/api/connections", {
-            method: "POST",
+        const resp = await fetch(url, {
+            method,
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ label, connection_string }),
         });
@@ -1205,9 +1253,11 @@ connModalSave.addEventListener("click", async () => {
             const err = await resp.json().catch(() => ({}));
             throw new Error(err.detail || `HTTP ${resp.status}`);
         }
-        const created = await resp.json();
+        const saved = await resp.json();
         closeConnectionModal();
-        await loadConnections(created.id != null ? created.id : null);
+        const keepId =
+            saved.id != null ? saved.id : editingId != null ? editingId : null;
+        await loadConnections(keepId);
     } catch (e) {
         appendError("Failed to save connection: " + e.message);
     }

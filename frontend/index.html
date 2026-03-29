@@ -46,6 +46,11 @@
                             <option value="">Loading...</option>
                         </select>
                     </div>
+                    <button type="button" id="edit-connection-btn" class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium theme-input focus:outline-none focus:ring-2 disabled:opacity-40 disabled:pointer-events-none" title="Edit connection" disabled aria-disabled="true">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"/>
+                        </svg>
+                    </button>
                     <button type="button" id="add-connection-btn" class="shrink-0 rounded-lg px-2.5 py-2 text-sm font-medium theme-input focus:outline-none focus:ring-2" title="Add connection">+</button>
                 </div>
                 <label for="db-select" class="text-xs block theme-label">Database</label>
@@ -134,7 +139,7 @@
 
     <div id="connection-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-black/50" aria-hidden="true">
         <div class="w-full max-w-lg rounded-xl border theme-sidebar theme-sidebar-border p-4 shadow-xl space-y-3">
-            <h2 class="text-sm font-semibold">Add MSSQL connection</h2>
+            <h2 id="connection-modal-title" class="text-sm font-semibold">Add MSSQL connection</h2>
             <p class="text-xs theme-muted">Full connection string (Windows auth, SQL auth, Azure / Entra including MFA, etc.).</p>
             <div>
                 <label for="conn-modal-label" class="text-xs block theme-label">Label</label>
