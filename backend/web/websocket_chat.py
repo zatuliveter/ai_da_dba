@@ -14,7 +14,7 @@ from backend.ai.store import (
     get_chat_token_stats,
 )
 
-log = logging.getLogger("agent")
+log = logging.getLogger(__name__)
 
 router = APIRouter()
 

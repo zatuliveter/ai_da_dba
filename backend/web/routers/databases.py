@@ -5,7 +5,7 @@ from fastapi import APIRouter, Body
 from backend.mssql_db import list_databases
 from backend.ai.store import get_db_description, set_db_description
 
-log = logging.getLogger("agent")
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/databases", tags=["databases"])
 

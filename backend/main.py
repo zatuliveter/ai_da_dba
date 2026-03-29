@@ -16,8 +16,8 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    init_db()
     validate_config()
+    init_db()
     yield
 
 

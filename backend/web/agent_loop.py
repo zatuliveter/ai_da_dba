@@ -2,14 +2,17 @@ import json
 import logging
 
 from fastapi import WebSocket
+from openai import OpenAI
 
-from backend.config import llm_client, LLM_MODEL
+from backend.config import API_KEY, API_URL, LLM_MODEL
 from backend.ai.prompts import get_system_prompt
 from backend.ai.store import ChatMessage, append_chat_messages, get_chat_messages, get_chat_token_stats, get_db_description
 from backend.ai.tools import TOOL_DEFINITIONS, dispatch_tool
 
-log = logging.getLogger("agent")
-
+log = logging.getLogger(__name__)
+    
+llm_client = OpenAI(api_key=API_KEY, base_url=API_URL)
+    
 EMPTY_TOKEN_STATS: dict = {
     "last_prompt_tokens": 0,
     "total_prompt_tokens": 0,
@@ -114,6 +117,8 @@ def chat_messages_to_api_messages(stored: list[ChatMessage]) -> list[dict]:
                 "tool_call_id": m.tool_call_id,
                 "content": m.tool_result,
             })
+        else:
+            log.warning("Unknown message role: %s", m.role)
     return api_messages
 
 
@@ -129,10 +134,6 @@ async def run_agent_loop(
         db_context += f" User-provided context: {description}"
     db_context += "\n"
     system_content = get_system_prompt(agent_role) + db_context
-
-    if llm_client is None:
-        await ws.send_text(json.dumps({"type": "error", "content": "LLM not configured: set API_KEY and API_URL."}))
-        return
 
     for round_num in range(MAX_TOOL_ROUNDS):
         stored = get_chat_messages(chat_id)

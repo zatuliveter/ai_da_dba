@@ -1,15 +1,16 @@
 """
 SQLite store: database descriptions, chats, and chat messages.
-DB file: backend/data/app.db (created on first use).
+DB file: data/app.db (created on first use).
 """
 import json
-import os
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
-from pathlib import Path
+import logging
 
 from backend.config import DATA_DIR
+
+log = logging.getLogger(__name__)
 
 DB_PATH = DATA_DIR / "app.db"
 
@@ -231,19 +232,24 @@ def create_chat(database_name: str, title: str = "Новый чат") -> dict:
 def get_chat_messages(chat_id: int) -> list[ChatMessage]:
     """Load all messages for a chat as list of ChatMessage."""
     with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT role, content, tool_result, tool_call_id, tool_calls_json, "
-            "prompt_tokens, cached_tokens, completion_tokens "
-            "FROM chat_messages WHERE chat_id = ? ORDER BY id ASC",
+        rows = conn.execute("""
+            SELECT role, content, tool_result, tool_call_id, tool_calls_json, 
+                   prompt_tokens, cached_tokens, completion_tokens 
+            FROM chat_messages 
+            WHERE chat_id = ? 
+            ORDER BY id ASC
+            """,
             (chat_id,),
         ).fetchall()
         out = []
         for r in rows:
             tool_calls = None
-            if r["tool_calls_json"]:
+            tool_calls_json = r["tool_calls_json"]
+            if tool_calls_json:
                 try:
-                    tool_calls = json.loads(r["tool_calls_json"])
-                except (json.JSONDecodeError, TypeError):
+                    tool_calls = json.loads(tool_calls_json)
+                except (json.JSONDecodeError, TypeError) as e:
+                    log.error("Error loading tool_calls_json: %s, content: %s", e, tool_calls_json)
                     pass
             out.append(
                 ChatMessage(

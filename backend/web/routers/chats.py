@@ -11,7 +11,7 @@ from backend.ai.store import (
     update_chat_title,
 )
 
-log = logging.getLogger("agent")
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/databases", tags=["chats"])
 
